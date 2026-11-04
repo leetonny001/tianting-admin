@@ -1,0 +1,144 @@
+// 端到端环境：真实的 Postgres + im-server（测试模式）+ console-server（测试模式，托管 dist/，响应头就是生产的 CSP）。
+// 由 Playwright 的 webServer 启动，结束时清理。源码默认在同级目录，可以用环境变量改。
+import { execFileSync, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import pg from 'pg';
+
+const imDir = resolve(
+  process.env.TIANTING_SERVER_DIR ??
+    (existsSync('../tianting-server/server') ? '../tianting-server/server' : '../im-mvp/server'),
+);
+const consoleDir = resolve(process.env.TIANTING_CONSOLE_DIR ?? '../tianting-console-server');
+const adminUrl = process.env.CON_TEST_ADMIN_URL ?? 'postgres://127.0.0.1:5432/postgres?sslmode=disable';
+const work = mkdtempSync(join(tmpdir(), 'tt-admin-e2e-'));
+const ports = { console: 18190, ops: 18191, ws: 18180, imAdmin: 18181 };
+// 可识别的固定测试密钥：scripts/check-dist.mjs 和 HAR 扫描都查它们。
+const seed = Buffer.from('tianting-e2e-signing-seed-32byte');
+const legacy = 'tianting-e2e-legacy-key';
+
+const go = (dir, out, pkg) => execFileSync('go', ['build', '-o', join(work, out), pkg], { cwd: dir, stdio: 'inherit' });
+go(imDir, 'im-server', './cmd/im-server');
+go(consoleDir, 'console-server', './cmd/console-server');
+
+const pub = execFileSync('node', [
+  '-e',
+  `
+  const c=require('crypto');
+  const k=c.createPrivateKey({key:Buffer.concat([Buffer.from('302e020100300506032b657004220420','hex'),Buffer.from('${seed.toString('hex')}','hex')]),format:'der',type:'pkcs8'});
+  process.stdout.write(c.createPublicKey(k).export({format:'der',type:'spki'}).subarray(12).toString('base64'));
+`,
+]).toString();
+const callers = join(work, 'callers.json');
+writeFileSync(
+  callers,
+  JSON.stringify([
+    {
+      id: 'console',
+      alg: 'ed25519',
+      publicKey: pub,
+      scopes: [
+        'user.read',
+        'user.write',
+        'user.kick',
+        'user.sessions',
+        'token.issue',
+        'group.read',
+        'group.write',
+        'group.dissolve',
+        'msg.meta',
+        'audit.read',
+        'social.settings',
+        'social.friends',
+      ],
+    },
+  ]),
+  { mode: 0o600 },
+);
+
+const dbName = 'tt_admin_e2e_' + randomBytes(4).toString('hex');
+const admin = new pg.Client({ connectionString: adminUrl });
+await admin.connect();
+await admin.query(`CREATE DATABASE ${dbName}`);
+await admin.query('ALTER ROLE console_app LOGIN').catch(() => undefined);
+const withDb = (user) => {
+  const u = new URL(adminUrl);
+  u.pathname = '/' + dbName;
+  if (user) u.username = user;
+  return u.toString();
+};
+const origin = `http://127.0.0.1:${ports.console}`;
+const consoleEnv = {
+  ...process.env,
+  CON_OWNER_DATABASE_URL: withDb(),
+  CON_DATABASE_URL: withDb('console_app'),
+  CON_TEST_MODE: '1',
+  CON_TEST_DISABLE_LOCKOUT: '1',
+  CON_SPACES: 'admin',
+  CON_ADMIN_ADDR: `127.0.0.1:${ports.console}`,
+  CON_ADMIN_ORIGIN: origin,
+  CON_ADMIN_WEB_DIR: resolve('dist'),
+  CON_METRICS_ADDR: 'off',
+  CON_ARGON_MEMORY_KIB: '1024',
+  CON_ARGON_TIME: '1',
+  CON_DATA_KEYS: 'k1:' + Buffer.alloc(32, 'd').toString('base64'),
+  CON_HASH_PEPPER: Buffer.alloc(32, 'p').toString('base64'),
+  CON_IM_ADMIN_URL: `http://127.0.0.1:${ports.imAdmin}`,
+  CON_IM_SIGNING_KEY: seed.toString('base64'),
+};
+execFileSync(join(work, 'console-server'), ['migrate', 'up'], { env: consoleEnv, stdio: 'inherit' });
+await admin.query('ALTER ROLE console_app LOGIN').catch(() => undefined);
+const code = execFileSync(
+  join(work, 'console-server'),
+  ['account', 'bootstrap', '--space', 'admin', '--username', 'root1'],
+  { env: consoleEnv },
+)
+  .toString()
+  .trim()
+  .split(': ')
+  .pop();
+writeFileSync(
+  new URL('./.state.json', import.meta.url),
+  JSON.stringify({
+    origin,
+    rootCode: code,
+    imAdmin: `http://127.0.0.1:${ports.imAdmin}`,
+    ws: `127.0.0.1:${ports.ws}`,
+    legacy,
+    clock: Date.now(),
+  }),
+);
+
+const procs = [
+  spawn(join(work, 'im-server'), [], {
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      IM_ADDR: `127.0.0.1:${ports.ws}`,
+      IM_ADMIN_ADDR: `127.0.0.1:${ports.imAdmin}`,
+      IM_METRICS_ADDR: 'off',
+      IM_PPROF_ADDR: 'off',
+      IM_OPS_ADDR: 'off',
+      IM_DB: join(work, 'im.db'),
+      IM_TEST_MODE: '1',
+      IM_ADMIN_KEY: legacy,
+      IM_ADMIN_CALLERS: callers,
+    },
+  }),
+  spawn(join(work, 'console-server'), [], { stdio: 'inherit', env: consoleEnv }),
+];
+
+let closing = false;
+const stop = async () => {
+  if (closing) return;
+  closing = true;
+  for (const p of procs) p.kill('SIGKILL');
+  await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`).catch(() => undefined);
+  await admin.end().catch(() => undefined);
+  process.exit(0);
+};
+process.on('SIGTERM', stop);
+process.on('SIGINT', stop);
+for (const p of procs) p.on('exit', (c) => !closing && (console.error('a server exited', c), stop()));

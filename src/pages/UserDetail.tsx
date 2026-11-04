@@ -1,0 +1,269 @@
+import { useCallback, useEffect, useState } from 'react';
+import { useParams } from 'react-router';
+import { api } from '../api/client';
+import type { FriendRow, SessionRow, UserRow } from '../api/types';
+import { Avatar, Badge, ConfirmDialog, Empty, ErrorNote, Text } from '../components/ui';
+import { formatTime } from '../lib/format';
+import { useCursorList } from '../lib/hooks';
+import { useSession } from '../session';
+
+interface SessionsResult {
+  sessions: SessionRow[];
+  partial: boolean;
+  scope: string;
+}
+
+/** partial 时不能下"不在线"的结论（AC-ADM-14-6）。 */
+function SessionsTable({ result }: { result: SessionsResult }) {
+  return (
+    <>
+      {result.partial && (
+        <p className="note note-warn">
+          只查了部分节点，结果可能不完整：{result.sessions.length}{' '}
+          个连接是目前能确认的，不代表用户在其他节点上没有连接。
+        </p>
+      )}
+      {result.sessions.length === 0 ? (
+        <Empty>{result.partial ? '已查询的节点上没有找到连接' : '没有在线连接'}</Empty>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>连接 ID</th>
+              <th>平台</th>
+              <th>建立时间</th>
+              <th>节点</th>
+              <th>IP（已脱敏）</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.sessions.map((s) => (
+              <tr key={s.connId}>
+                <td className="mono">
+                  <Text>{s.connId}</Text>
+                </td>
+                <td>
+                  <Text>{s.platform}</Text>
+                </td>
+                <td>{formatTime(s.connectedAt)}</td>
+                <td>
+                  <Text>{s.node}</Text>
+                </td>
+                <td>
+                  <Text>{s.ip}</Text>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  );
+}
+
+function Friends({ userId }: { userId: string }) {
+  const [open, setOpen] = useState(false);
+  const list = useCursorList<FriendRow>(
+    (cursor) =>
+      `/console/api/users/${encodeURIComponent(userId)}/friends${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+    'friends',
+    open ? userId : '',
+  );
+  return (
+    <section className="panel">
+      <h2>好友列表</h2>
+      {!open ? (
+        <button className="btn" type="button" onClick={() => setOpen(true)}>
+          查看好友列表
+        </button>
+      ) : (
+        <>
+          <ErrorNote error={list.error} />
+          {list.loaded && list.items.length === 0 && <Empty>没有好友</Empty>}
+          {list.items.length > 0 && (
+            <table>
+              <thead>
+                <tr>
+                  <th>对方 userId</th>
+                  <th>来源</th>
+                  <th>建立时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.items.map((f) => (
+                  <tr key={f.userId}>
+                    <td>
+                      <Text>{f.userId}</Text>
+                    </td>
+                    <td>{f.source === 'admin' ? '后台导入' : '用户添加'}</td>
+                    <td>{formatTime(f.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {list.hasMore && (
+            <button type="button" className="btn more" disabled={list.loading} onClick={list.loadMore}>
+              加载更多
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+export function UserDetailPage() {
+  const { id = '' } = useParams();
+  const { can } = useSession();
+  const [user, setUser] = useState<UserRow | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [dialog, setDialog] = useState<'kick' | 'sessions' | 'official' | null>(null);
+  const [sessions, setSessions] = useState<SessionsResult | null>(null);
+  const [notice, setNotice] = useState('');
+  const [showAvatar, setShowAvatar] = useState(false);
+  const path = `/console/api/users/${encodeURIComponent(id)}`;
+  const load = useCallback(() => {
+    setError(null);
+    return api<UserRow>('GET', path)
+      .then(setUser)
+      .catch((err) => {
+        setUser(null);
+        setError(err);
+      });
+  }, [path]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  if (error && !user) {
+    return (
+      <>
+        <h1>
+          <Text>{id}</Text>
+        </h1>
+        <ErrorNote error={error} />
+      </>
+    );
+  }
+  if (!user) return <p className="loading">加载中…</p>;
+  const name = user.nickname || user.userId;
+  const deviceText = sessions ? `${sessions.sessions.length} 个` : '全部';
+  return (
+    <>
+      <div className="page-head">
+        <h1>
+          <Avatar name={name} /> <Text>{user.userId}</Text>
+        </h1>
+        <div className="actions">
+          <button className="btn" type="button" onClick={() => void load()}>
+            刷新
+          </button>
+          {can('user.sessions') && (
+            <button className="btn" type="button" onClick={() => setDialog('sessions')}>
+              查看在线设备
+            </button>
+          )}
+          {can('user.official') && (
+            <button className="btn" type="button" onClick={() => setDialog('official')}>
+              {user.official ? '取消官方账号' : '设为官方账号'}
+            </button>
+          )}
+          {can('user.kick') && (
+            <button className="btn btn-danger" type="button" onClick={() => setDialog('kick')}>
+              强制下线
+            </button>
+          )}
+        </div>
+      </div>
+      {notice && (
+        <p className="note note-ok" role="status">
+          {notice}
+        </p>
+      )}
+      <section className="panel">
+        <dl className="kv">
+          <dt>昵称</dt>
+          <dd>
+            <Text>{user.nickname || '—'}</Text>
+          </dd>
+          <dt>注册时间</dt>
+          <dd>{formatTime(user.createdAt)}</dd>
+          <dt>在线</dt>
+          <dd>{user.online ? <Badge tone="good">在线</Badge> : <Badge>离线</Badge>}</dd>
+          <dt>官方账号</dt>
+          <dd>{user.official ? <Badge tone="warn">官方</Badge> : '否'}</dd>
+          <dt>头像</dt>
+          <dd>
+            {!user.avatar ? (
+              '—'
+            ) : showAvatar ? (
+              <Text className="mono">{user.avatar}</Text>
+            ) : (
+              <button type="button" className="link" onClick={() => setShowAvatar(true)}>
+                查看原图地址
+              </button>
+            )}
+          </dd>
+        </dl>
+      </section>
+      {sessions && (
+        <section className="panel">
+          <h2>在线设备</h2>
+          <SessionsTable result={sessions} />
+        </section>
+      )}
+      {can('social.read') && <Friends userId={user.userId} />}
+      {dialog === 'kick' && (
+        <ConfirmDialog
+          title="强制下线"
+          needReason
+          danger
+          onClose={() => setDialog(null)}
+          onConfirm={async ({ reason, ticket }) => {
+            await api('POST', `${path}/kick`, { reason, ...(ticket ? { ticket } : {}) });
+            setNotice('已强制下线');
+            setSessions(null);
+            await load();
+          }}
+        >
+          <p>
+            将强制 <Text>{user.userId}</Text> 的{deviceText}在线设备下线。
+          </p>
+          <p>业务方重新签发凭证后用户即可再次登录；要阻止登录请使用封禁。</p>
+        </ConfirmDialog>
+      )}
+      {dialog === 'sessions' && (
+        <ConfirmDialog
+          title="查看在线设备"
+          needReason
+          confirmLabel="查询"
+          onClose={() => setDialog(null)}
+          onConfirm={async ({ reason, ticket }) => {
+            // POST：userId 和理由不进 URL 和浏览器历史（AC-ADM-14-5）。
+            const r = await api<SessionsResult>('POST', '/console/api/users/sessions/query', {
+              userId: user.userId,
+              reason,
+              ...(ticket ? { ticket } : {}),
+            });
+            setSessions(r);
+          }}
+        >
+          查看在线设备会写审计，每天最多查 50 个不同的用户。
+        </ConfirmDialog>
+      )}
+      {dialog === 'official' && (
+        <ConfirmDialog
+          title={user.official ? '取消官方账号' : '设为官方账号'}
+          needReason
+          onClose={() => setDialog(null)}
+          onConfirm={async ({ reason, ticket }) => {
+            await api('PUT', `${path}/official`, { official: !user.official, reason, ...(ticket ? { ticket } : {}) });
+            await load();
+          }}
+        >
+          官方账号不受好友制和陌生人限额限制，用户仍可以拉黑它。
+        </ConfirmDialog>
+      )}
+    </>
+  );
+}
