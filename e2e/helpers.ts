@@ -120,7 +120,15 @@ let rootApi: Api | null = null;
 
 /** 超管会话（node 里）：账号在 state 里，跨测试文件复用。 */
 export async function root(): Promise<Api> {
-  if (rootApi) return rootApi;
+  if (rootApi) {
+    // 别的用例可能把时钟推进了很久（AC-ADM-70-2），旧会话已经过期。
+    const alive = await rootApi.call('GET', '/console/api/session').then(
+      () => true,
+      () => false,
+    );
+    if (alive) return rootApi;
+    rootApi = null;
+  }
   const s = readState();
   if (!s.accounts?.root1) {
     await setClocks(s.clock);

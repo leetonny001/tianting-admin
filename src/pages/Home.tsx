@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
+import { DataOverview } from '../components/DataOverview';
 import { Field } from '../components/ui';
 import { useSession } from '../session';
 
@@ -14,6 +15,7 @@ export function HomePage() {
   return (
     <>
       <h1>你好，{session?.account.displayName || session?.account.username}</h1>
+      {can('stats.read') && <DataOverview />}
       {can('user.read') && (
         <form className="panel" onSubmit={submit}>
           <Field label="快捷搜索用户" hint="输入 userId 或昵称的开头">

@@ -14,7 +14,13 @@ const imDir = resolve(
 const consoleDir = resolve(process.env.TIANTING_CONSOLE_DIR ?? '../tianting-console-server');
 const adminUrl = process.env.CON_TEST_ADMIN_URL ?? 'postgres://127.0.0.1:5432/postgres?sslmode=disable';
 const work = mkdtempSync(join(tmpdir(), 'tt-admin-e2e-'));
-const ports = { console: 18190, ops: 18191, ws: 18180, imAdmin: 18181 };
+// im-server 的端口可以换：tianting-ios 的测试环境也用 18180、18181。
+const ports = {
+  console: 18190,
+  ops: 18191,
+  ws: Number(process.env.E2E_IM_WS_PORT ?? 18180),
+  imAdmin: Number(process.env.E2E_IM_ADMIN_PORT ?? 18181),
+};
 // 可识别的固定测试密钥：scripts/check-dist.mjs 和 HAR 扫描都查它们。
 const seed = Buffer.from('tianting-e2e-signing-seed-32byte');
 const legacy = 'tianting-e2e-legacy-key';
@@ -61,6 +67,7 @@ writeFileSync(
         'mute.write',
         'push.user',
         'push.all',
+        'stats.read',
       ],
       // 持有 push.all 必须配，和 CON_PUSH_TEMPLATES 的 type 一致（PRD-live F-PUSH-09 规则 3）。
       pushTypes: ['notice', 'activity'],
