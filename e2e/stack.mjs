@@ -59,7 +59,11 @@ writeFileSync(
         'user.ban',
         'msg.delete',
         'mute.write',
+        'push.user',
+        'push.all',
       ],
+      // 持有 push.all 必须配，和 CON_PUSH_TEMPLATES 的 type 一致（PRD-live F-PUSH-09 规则 3）。
+      pushTypes: ['notice', 'activity'],
     },
     // 正文走单独的凭证（PRD-admin F-KEY-02 规则 3）。
     {
@@ -103,6 +107,7 @@ const consoleEnv = {
   CON_IM_ADMIN_URL: `http://127.0.0.1:${ports.imAdmin}`,
   CON_IM_SIGNING_KEY: seed.toString('base64'),
   CON_IM_MSGREAD_KEY: msgReadSeed.toString('base64'),
+  CON_PUSH_TEMPLATES: join(consoleDir, 'deploy/push-templates.example.json'),
 };
 execFileSync(join(work, 'console-server'), ['migrate', 'up'], { env: consoleEnv, stdio: 'inherit' });
 await admin.query('ALTER ROLE console_app LOGIN').catch(() => undefined);
@@ -142,6 +147,7 @@ const procs = [
       IM_ADMIN_KEY: legacy,
       IM_ADMIN_CALLERS: callers,
       IM_V13_ADMIN_FEATURES: '1',
+      IM_PUSH_ENABLED: '1',
     },
   }),
   spawn(join(work, 'console-server'), [], { stdio: 'inherit', env: consoleEnv }),

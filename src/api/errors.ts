@@ -15,6 +15,15 @@ const byReason: Record<string, string> = {
   containsUsername: '密码不能包含账号名',
   weak: '密码太常见，请换一个',
   reused: '不能使用最近用过的密码',
+  pushAllInterval: '全员通知间隔不少于 5 分钟',
+  pushResultUnknown: '结果未知，系统会自动确认，请稍后查看发送记录',
+  pushTooManyUsers: '单次最多 1000 个用户',
+  templateUnknown: '通知模板不存在',
+  dataInvalid: '通知内容不符合模板要求',
+  dataTooLarge: '通知内容不能超过 4KB',
+  draftExpired: '草稿已超过 24 小时，已作废，请重新发起',
+  draftClosed: '这份草稿已经批准过了',
+  ownDraft: '不能批准自己发起的草稿',
 };
 
 const byCode: Record<number, string> = {

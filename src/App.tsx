@@ -11,6 +11,7 @@ import { HomePage, NoPermissionPage } from './pages/Home';
 import { MetaPage } from './pages/Meta';
 import { MessageBodyPage } from './pages/MessageBody';
 import { NotificationsPage } from './pages/Notifications';
+import { PushDraftsPage, PushNewPage, PushRecordsPage } from './pages/Push';
 import { SettingsPage } from './pages/Settings';
 import { SocialSettingsPage } from './pages/SocialSettings';
 import { UserDetailPage } from './pages/UserDetail';
@@ -19,7 +20,7 @@ import { UsersPage } from './pages/Users';
 import { useSession } from './session';
 
 /** 路由守卫（FE-401）：每个路由声明权限点。权限只是界面提示，真正的判断在 console-server。 */
-function Guard({ perm, children }: { perm?: string; children: ReactNode }) {
+function Guard({ perm, children }: { perm?: string | string[]; children: ReactNode }) {
   const { session, can, signedOutReason } = useSession();
   if (session === undefined) return <p className="loading">加载中…</p>;
   if (session === null) {
@@ -28,7 +29,8 @@ function Guard({ perm, children }: { perm?: string; children: ReactNode }) {
     );
   }
   if (session.state === 'setup') return <Navigate to="/setup" replace />;
-  return <Layout>{perm && !can(perm) ? <NoPermissionPage /> : children}</Layout>;
+  const allowed = !perm || [perm].flat().some(can);
+  return <Layout>{allowed ? children : <NoPermissionPage />}</Layout>;
 }
 
 export function App() {
@@ -122,6 +124,30 @@ export function App() {
         element={
           <Guard perm="msg.read.group">
             <MessageBodyPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/push/new"
+        element={
+          <Guard perm="push.user">
+            <PushNewPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/push/drafts"
+        element={
+          <Guard perm={['push.all.request', 'push.all.approve']}>
+            <PushDraftsPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/push/records"
+        element={
+          <Guard perm="push.records.read">
+            <PushRecordsPage />
           </Guard>
         }
       />

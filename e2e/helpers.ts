@@ -228,4 +228,11 @@ export async function setFault(auditWrite: string) {
   if (!r.ok) throw new Error(`faults ${r.status}`);
 }
 
+/** imDropResponse：im-server 处理完，console 收不到响应（PRD-live 8.2 节）。 */
+export async function setIMFaults(faults: { imDropResponse?: boolean; imLatencyMs?: number }) {
+  const s = readState();
+  const r = await fetch(`${s.origin}/console/test/faults`, { method: 'POST', body: JSON.stringify(faults) });
+  if (!r.ok) throw new Error(`faults ${r.status}`);
+}
+
 export const uid = (p: string) => `${p}${Math.floor(Math.random() * 1e8)}`;

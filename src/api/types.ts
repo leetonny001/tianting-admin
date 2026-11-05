@@ -162,3 +162,66 @@ export interface ValidateResult {
   fileSha256?: string;
   preview?: Record<string, string>[];
 }
+
+export interface PushSchema {
+  type?: string | string[];
+  title?: string;
+  description?: string;
+  properties?: Record<string, PushSchema>;
+  required?: string[];
+  enum?: (string | number | boolean | null)[];
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+}
+
+export interface PushTemplate {
+  type: string;
+  title: string;
+  schema: PushSchema;
+}
+
+export interface PushPreview {
+  target: 'user' | 'all';
+  targetCount: number;
+  type: string;
+  dataLength: number;
+  data: string;
+}
+
+export interface PushDraft {
+  id: string;
+  type: string;
+  dataPretty: string;
+  reason: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
+  expiresAt: number;
+  status: 'pending' | 'expired' | 'approved';
+  approvedByName?: string;
+  approvedAt?: number;
+  sendStatus?: string;
+}
+
+export interface PushRecord {
+  id: string;
+  kind: 'user' | 'all';
+  type: string;
+  dataPretty: string;
+  dataSha256: string;
+  userIds: string[];
+  targetCount: number;
+  reason: string;
+  ticket?: string;
+  createdByName: string;
+  approvedByName?: string;
+  sentAt: number;
+  pushId: string;
+  status: string;
+  errorCode?: number;
+  created?: boolean;
+  replayedAt?: number;
+  replayCreated?: boolean;
+  replayExpired?: boolean;
+}

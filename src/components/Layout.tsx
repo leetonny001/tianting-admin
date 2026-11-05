@@ -7,7 +7,7 @@ import { useSession } from '../session';
 import { Text } from './ui';
 
 // 菜单和路由守卫用同一个权限点。社交配置页要 social.settings：客服虽然能读配置，但 AC-ADM-05-3 要求菜单里没有它。
-const menu: { to: string; label: string; perm?: string; end?: boolean }[] = [
+const menu: { to: string; label: string; perm?: string | string[]; end?: boolean }[] = [
   { to: '/', label: '首页', end: true },
   { to: '/users', label: '用户', perm: 'user.read', end: true },
   { to: '/users/import', label: '用户导入', perm: 'user.import' },
@@ -15,6 +15,9 @@ const menu: { to: string; label: string; perm?: string; end?: boolean }[] = [
   { to: '/social/settings', label: '社交配置', perm: 'social.settings' },
   { to: '/groups', label: '群', perm: 'group.read' },
   { to: '/messages', label: '消息元数据', perm: 'msg.meta' },
+  { to: '/push/new', label: '发系统通知', perm: 'push.user' },
+  { to: '/push/drafts', label: '全员通知草稿', perm: ['push.all.request', 'push.all.approve'] },
+  { to: '/push/records', label: '通知发送记录', perm: 'push.records.read' },
   { to: '/audit', label: '审计日志', perm: 'audit.read' },
   { to: '/accounts', label: '账号管理', perm: 'admin.manage' },
 ];
@@ -62,7 +65,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="brand">天听管理后台</div>
         <ul>
           {menu
-            .filter((m) => !m.perm || can(m.perm))
+            .filter((m) => !m.perm || [m.perm].flat().some(can))
             .map((m) => (
               <li key={m.to}>
                 <NavLink to={m.to} end={m.end}>

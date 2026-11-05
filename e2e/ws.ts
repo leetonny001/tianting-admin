@@ -14,11 +14,16 @@ export async function dialIM(userId: string, platform: string) {
   const { token } = (await r.json()) as { token: string };
   const ws = new WebSocket(`ws://${s.ws}/ws?platform=${platform}`);
   const events: Record<string, unknown>[] = [];
+  const pushes: Record<string, unknown>[] = [];
   const waiters: (() => void)[] = [];
   ws.addEventListener('message', (e) => {
     const f = JSON.parse(String(e.data));
     if (f.cmd === 'event') {
       events.push(f.data);
+      waiters.splice(0).forEach((w) => w());
+    }
+    if (f.cmd === 'push') {
+      pushes.push(f.data);
       waiters.splice(0).forEach((w) => w());
     }
     if (f.id === 'auth') waiters.splice(0).forEach((w) => w());
@@ -42,7 +47,25 @@ export async function dialIM(userId: string, platform: string) {
       });
     }
   };
-  return { waitEvent, kicked: () => waitEvent('kicked'), close: () => ws.close() };
+  const waitPush = async (match: (data: unknown) => boolean) => {
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      const found = pushes.find((p) => match(p.data));
+      if (found) return found as { pushId: string; type: string; target: string; data: unknown };
+      if (Date.now() > deadline) throw new Error('no push frame');
+      await new Promise<void>((r) => {
+        waiters.push(r);
+        setTimeout(r, 200);
+      });
+    }
+  };
+  return {
+    waitEvent,
+    waitPush,
+    pushes,
+    kicked: () => waitEvent('kicked'),
+    close: () => ws.close(),
+  };
 }
 
 export async function imSend(userId: string, groupId: string, count: number) {
