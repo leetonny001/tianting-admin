@@ -26,6 +26,10 @@ export interface UserRow {
   createdAt?: number;
   official: boolean;
   online: boolean;
+  /** 第二批：im-server 的值，过期的已经是 null。 */
+  ban?: { until: number | null; reason: string; by: string; at: number } | null;
+  /** 没有这个键 = 没有禁言；null = 永久。 */
+  mutedUntil?: number | null;
 }
 
 export interface GroupRow {
@@ -55,6 +59,7 @@ export interface MemberRow {
   userId: string;
   role: string;
   joinedAt: number;
+  mutedUntil?: number | null;
 }
 
 export interface FriendRow {
@@ -70,6 +75,29 @@ export interface MessageMeta {
   type: string;
   bodyLength: number;
   ts: number;
+  deleted?: boolean;
+  deletedAt?: number;
+  deletedBy?: string;
+}
+
+/** 正文页的一条消息（只在 MessageBody 页面用）。 */
+export interface BodyMessage {
+  seq: number;
+  msgId: string;
+  from: string;
+  type: string;
+  ts: number;
+  body?: { text?: string; data?: unknown };
+  deleted?: boolean;
+  deletedAt?: number;
+  deletedBy?: string;
+}
+
+export interface BodyPage {
+  messages: BodyMessage[];
+  hasMore: boolean;
+  grantPrefix: string;
+  expiresAt: number;
 }
 
 export interface SessionRow {

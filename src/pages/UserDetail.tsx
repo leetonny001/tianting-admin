@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { api } from '../api/client';
 import type { FriendRow, SessionRow, UserRow } from '../api/types';
-import { Avatar, Badge, ConfirmDialog, Empty, ErrorNote, Text } from '../components/ui';
+import { MutedBadge, MuteDialog, UnmuteDialog, untilText } from '../components/Moderation';
+import { Avatar, Badge, ConfirmDialog, Empty, ErrorNote, Field, Text } from '../components/ui';
 import { formatTime } from '../lib/format';
 import { useCursorList } from '../lib/hooks';
 import { useSession } from '../session';
@@ -118,7 +119,10 @@ export function UserDetailPage() {
   const { can } = useSession();
   const [user, setUser] = useState<UserRow | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [dialog, setDialog] = useState<'kick' | 'sessions' | 'official' | null>(null);
+  const [dialog, setDialog] = useState<'kick' | 'sessions' | 'official' | 'ban' | 'unban' | 'mute' | 'unmute' | null>(
+    null,
+  );
+  const [banFor, setBanFor] = useState('1d');
   const [sessions, setSessions] = useState<SessionsResult | null>(null);
   const [notice, setNotice] = useState('');
   const [showAvatar, setShowAvatar] = useState(false);
@@ -173,6 +177,26 @@ export function UserDetailPage() {
               强制下线
             </button>
           )}
+          {can('mute.write') &&
+            (user.mutedUntil !== undefined ? (
+              <button className="btn" type="button" onClick={() => setDialog('unmute')}>
+                解除禁言
+              </button>
+            ) : (
+              <button className="btn btn-danger" type="button" onClick={() => setDialog('mute')}>
+                禁言
+              </button>
+            ))}
+          {can('user.ban') &&
+            (user.ban ? (
+              <button className="btn" type="button" onClick={() => setDialog('unban')}>
+                解封
+              </button>
+            ) : (
+              <button className="btn btn-danger" type="button" onClick={() => setDialog('ban')}>
+                封禁
+              </button>
+            ))}
         </div>
       </div>
       {notice && (
@@ -190,6 +214,19 @@ export function UserDetailPage() {
           <dd>{formatTime(user.createdAt)}</dd>
           <dt>在线</dt>
           <dd>{user.online ? <Badge tone="good">在线</Badge> : <Badge>离线</Badge>}</dd>
+          <dt>状态</dt>
+          <dd>
+            {user.ban ? (
+              <>
+                <Badge tone="bad">已封禁</Badge> 到期：{untilText(user.ban.until)}，理由：<Text>{user.ban.reason}</Text>
+                ，操作人：
+                <Text>{user.ban.by}</Text>
+              </>
+            ) : (
+              '未封禁'
+            )}{' '}
+            <MutedBadge row={user} />
+          </dd>
           <dt>官方账号</dt>
           <dd>{user.official ? <Badge tone="warn">官方</Badge> : '否'}</dd>
           <dt>头像</dt>
@@ -232,6 +269,51 @@ export function UserDetailPage() {
           <p>业务方重新签发凭证后用户即可再次登录；要阻止登录请使用封禁。</p>
         </ConfirmDialog>
       )}
+      {dialog === 'ban' && (
+        <ConfirmDialog
+          title="封禁"
+          needReason
+          danger
+          confirmLabel="封禁"
+          onClose={() => setDialog(null)}
+          onConfirm={async ({ reason, ticket }) => {
+            await api('POST', `${path}/ban`, { duration: banFor, reason, ...(ticket ? { ticket } : {}) });
+            await load();
+          }}
+        >
+          <p>
+            立即踢掉 <Text>{user.userId}</Text>{' '}
+            的全部在线设备，封禁期间业务方也不能给他签发凭证。资料、好友、群和历史消息不变。
+          </p>
+          <Field label="时长">
+            {(fid) => (
+              <select id={fid} value={banFor} onChange={(e) => setBanFor(e.target.value)}>
+                <option value="1h">1 小时</option>
+                <option value="1d">1 天</option>
+                <option value="7d">7 天</option>
+                <option value="30d">30 天</option>
+                <option value="permanent">永久</option>
+              </select>
+            )}
+          </Field>
+        </ConfirmDialog>
+      )}
+      {dialog === 'unban' && (
+        <ConfirmDialog
+          title="解封"
+          needReason
+          confirmLabel="解封"
+          onClose={() => setDialog(null)}
+          onConfirm={async ({ reason, ticket }) => {
+            await api('POST', `${path}/unban`, { reason, ...(ticket ? { ticket } : {}) });
+            await load();
+          }}
+        >
+          解封后要由业务方重新签发凭证，用户才能登录。
+        </ConfirmDialog>
+      )}
+      {dialog === 'mute' && <MuteDialog userId={user.userId} onDone={load} onClose={() => setDialog(null)} />}
+      {dialog === 'unmute' && <UnmuteDialog userId={user.userId} onDone={load} onClose={() => setDialog(null)} />}
       {dialog === 'sessions' && (
         <ConfirmDialog
           title="查看在线设备"

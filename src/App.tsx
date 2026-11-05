@@ -9,6 +9,7 @@ import { GroupCreatePage, GroupsPage } from './pages/Groups';
 import { GroupDetailPage } from './pages/GroupDetail';
 import { HomePage, NoPermissionPage } from './pages/Home';
 import { MetaPage } from './pages/Meta';
+import { MessageBodyPage } from './pages/MessageBody';
 import { NotificationsPage } from './pages/Notifications';
 import { SettingsPage } from './pages/Settings';
 import { SocialSettingsPage } from './pages/SocialSettings';
@@ -113,6 +114,14 @@ export function App() {
         element={
           <Guard perm="msg.meta">
             <MetaPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/messages/body"
+        element={
+          <Guard perm="msg.read.group">
+            <MessageBodyPage />
           </Guard>
         }
       />

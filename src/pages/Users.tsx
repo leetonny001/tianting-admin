@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { UserRow } from '../api/types';
+import { MutedBadge, untilText } from '../components/Moderation';
 import { Avatar, Badge, Empty, ErrorNote, Field, Text } from '../components/ui';
 import { formatTime } from '../lib/format';
 import { useCursorList } from '../lib/hooks';
@@ -81,6 +82,8 @@ export function UsersPage() {
                 <td>
                   {u.online ? <Badge tone="good">在线</Badge> : <Badge>离线</Badge>}
                   {u.official && <Badge tone="warn">官方</Badge>}
+                  {u.ban && <Badge tone="bad">已封禁，到期：{untilText(u.ban.until)}</Badge>}
+                  <MutedBadge row={u} />
                 </td>
               </tr>
             ))}

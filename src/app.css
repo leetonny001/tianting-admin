@@ -558,3 +558,50 @@ td {
   padding: 10px 14px;
   margin-bottom: 8px;
 }
+
+/* 正文页（FE-421）：水印覆盖整个消息区域；不能选中只是体验，不作为防泄露手段。 */
+.body-area {
+  position: relative;
+  min-height: 240px;
+  overflow: hidden;
+  user-select: none;
+  padding: 12px;
+  background: var(--bg);
+}
+.watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-auto-rows: 88px;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.14;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.watermark span {
+  transform: rotate(-20deg);
+}
+.body-row {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.body-row input {
+  position: relative;
+  z-index: 2;
+}
+.body-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 4px 0 0;
+}
+.deleted {
+  margin: 4px 0 0;
+  opacity: 0.7;
+}

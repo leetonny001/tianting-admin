@@ -23,14 +23,18 @@ const go = (dir, out, pkg) => execFileSync('go', ['build', '-o', join(work, out)
 go(imDir, 'im-server', './cmd/im-server');
 go(consoleDir, 'console-server', './cmd/console-server');
 
-const pub = execFileSync('node', [
-  '-e',
-  `
+const publicKeyOf = (s) =>
+  execFileSync('node', [
+    '-e',
+    `
   const c=require('crypto');
-  const k=c.createPrivateKey({key:Buffer.concat([Buffer.from('302e020100300506032b657004220420','hex'),Buffer.from('${seed.toString('hex')}','hex')]),format:'der',type:'pkcs8'});
+  const k=c.createPrivateKey({key:Buffer.concat([Buffer.from('302e020100300506032b657004220420','hex'),Buffer.from('${s.toString('hex')}','hex')]),format:'der',type:'pkcs8'});
   process.stdout.write(c.createPublicKey(k).export({format:'der',type:'spki'}).subarray(12).toString('base64'));
 `,
-]).toString();
+  ]).toString();
+const pub = publicKeyOf(seed);
+const msgReadSeed = Buffer.from('tianting-e2e-msgread-seed-32byte');
+const msgReadPub = publicKeyOf(msgReadSeed);
 const callers = join(work, 'callers.json');
 writeFileSync(
   callers,
@@ -52,7 +56,18 @@ writeFileSync(
         'audit.read',
         'social.settings',
         'social.friends',
+        'user.ban',
+        'msg.delete',
+        'mute.write',
       ],
+    },
+    // 正文走单独的凭证（PRD-admin F-KEY-02 规则 3）。
+    {
+      id: 'console-msgread',
+      alg: 'ed25519',
+      publicKey: msgReadPub,
+      bodyAccess: true,
+      scopes: ['msg.body.group', 'msg.body.c2c', 'msg.quarantine'],
     },
   ]),
   { mode: 0o600 },
@@ -87,6 +102,7 @@ const consoleEnv = {
   CON_HASH_PEPPER: Buffer.alloc(32, 'p').toString('base64'),
   CON_IM_ADMIN_URL: `http://127.0.0.1:${ports.imAdmin}`,
   CON_IM_SIGNING_KEY: seed.toString('base64'),
+  CON_IM_MSGREAD_KEY: msgReadSeed.toString('base64'),
 };
 execFileSync(join(work, 'console-server'), ['migrate', 'up'], { env: consoleEnv, stdio: 'inherit' });
 await admin.query('ALTER ROLE console_app LOGIN').catch(() => undefined);
@@ -125,6 +141,7 @@ const procs = [
       IM_TEST_MODE: '1',
       IM_ADMIN_KEY: legacy,
       IM_ADMIN_CALLERS: callers,
+      IM_V13_ADMIN_FEATURES: '1',
     },
   }),
   spawn(join(work, 'console-server'), [], { stdio: 'inherit', env: consoleEnv }),

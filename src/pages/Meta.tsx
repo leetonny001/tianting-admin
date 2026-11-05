@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { api } from '../api/client';
 import type { MessageMeta } from '../api/types';
 import { ConfirmDialog, Empty, ErrorNote, Field, Text } from '../components/ui';
 import { formatTime, validConvId } from '../lib/format';
+import { useSession } from '../session';
 
 const PATH = '/console/api/messages/meta/query';
 
@@ -12,9 +13,11 @@ interface Page {
   hasMore: boolean;
 }
 
-/** 这个页面没有任何正文字段：类型里就没有。 */
+/** 这个页面没有任何正文字段：类型里就没有。正文在 MessageBody 页面，要单独授权。 */
 export function MetaPage() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { can } = useSession();
   const fromState = (location.state as { convId?: string } | null)?.convId ?? '';
   const [convId, setConvId] = useState(fromState);
   const [from, setFrom] = useState('');
@@ -110,6 +113,28 @@ export function MetaPage() {
         </div>
       </form>
       <ErrorNote error={error} />
+      {active && rows && (
+        <div className="actions">
+          {can(active.startsWith('c2c:') ? 'msg.read.c2c' : 'msg.read.group') && (
+            <button
+              className="btn"
+              type="button"
+              onClick={() => navigate('/messages/body', { state: { convId: active } })}
+            >
+              查看正文
+            </button>
+          )}
+          {can('msg.quarantine.read') && (
+            <button
+              className="btn"
+              type="button"
+              onClick={() => navigate('/messages/body', { state: { convId: active, quarantine: true } })}
+            >
+              查看隔离原文
+            </button>
+          )}
+        </div>
+      )}
       {rows && rows.length === 0 && <Empty>这个会话没有消息</Empty>}
       {rows && rows.length > 0 && (
         <table>
@@ -121,6 +146,7 @@ export function MetaPage() {
               <th>类型</th>
               <th>正文长度</th>
               <th>时间</th>
+              <th>状态</th>
             </tr>
           </thead>
           <tbody>
@@ -138,6 +164,13 @@ export function MetaPage() {
                 </td>
                 <td>{m.bodyLength}</td>
                 <td className="nowrap">{formatTime(m.ts)}</td>
+                <td>
+                  {m.deleted && (
+                    <>
+                      已删除（<Text>{m.deletedBy ?? ''}</Text>，{formatTime(m.deletedAt)}）
+                    </>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

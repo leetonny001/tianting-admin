@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { MutedBadge, MuteDialog, UnmuteDialog } from '../components/Moderation';
 import { Link, useNavigate, useParams } from 'react-router';
 import { api } from '../api/client';
 import type { BatchResult, GroupDetail, MemberRow } from '../api/types';
@@ -17,6 +18,8 @@ function Members({ groupId, canWrite, refresh }: { groupId: string; canWrite: bo
   const [batch, setBatch] = useState<BatchResult | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [dialog, setDialog] = useState<'add' | 'remove' | null>(null);
+  const [muting, setMuting] = useState<{ userId: string; release: boolean } | null>(null);
+  const { can } = useSession();
   const path = `/console/api/groups/${encodeURIComponent(groupId)}/members`;
   const list = useCursorList<MemberRow>(
     (cursor) => {
@@ -61,6 +64,8 @@ function Members({ groupId, canWrite, refresh }: { groupId: string; canWrite: bo
               <th>userId</th>
               <th>角色</th>
               <th>入群时间</th>
+              <th>禁言</th>
+              {can('mute.write') && <th>操作</th>}
             </tr>
           </thead>
           <tbody>
@@ -73,6 +78,30 @@ function Members({ groupId, canWrite, refresh }: { groupId: string; canWrite: bo
                 </td>
                 <td>{roleText[m.role] ?? m.role}</td>
                 <td>{formatTime(m.joinedAt)}</td>
+                <td>
+                  <MutedBadge row={m} />
+                </td>
+                {can('mute.write') && (
+                  <td>
+                    {m.mutedUntil !== undefined ? (
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => setMuting({ userId: m.userId, release: true })}
+                      >
+                        解除
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => setMuting({ userId: m.userId, release: false })}
+                      >
+                        群内禁言
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -104,6 +133,22 @@ function Members({ groupId, canWrite, refresh }: { groupId: string; canWrite: bo
           <ErrorNote error={error} />
           {batch && <BatchOutcome result={batch} />}
         </div>
+      )}
+      {muting && !muting.release && (
+        <MuteDialog
+          userId={muting.userId}
+          groupId={groupId}
+          onDone={() => list.reload()}
+          onClose={() => setMuting(null)}
+        />
+      )}
+      {muting?.release && (
+        <UnmuteDialog
+          userId={muting.userId}
+          groupId={groupId}
+          onDone={() => list.reload()}
+          onClose={() => setMuting(null)}
+        />
       )}
       {dialog === 'add' && (
         <ConfirmDialog
