@@ -62,6 +62,38 @@ function SessionsTable({ result }: { result: SessionsResult }) {
   );
 }
 
+/**
+ * 账号信息（F-ACC-09 规则 5）：只读，没有任何改密码、改恢复码的操作（AC-ACC-09-11）。
+ * 取不到不等于没有账号：只有 hasAccount=false 才能说"没有账号"。
+ */
+function AccountPanel({ user }: { user: UserRow }) {
+  const account = user.account;
+  return (
+    <section className="panel">
+      <h2>账号信息</h2>
+      {user.accountUnavailable || !account ? (
+        <p className="note note-warn">暂不可用，请稍后刷新。这不代表用户没有账号。</p>
+      ) : !account.hasAccount ? (
+        <dl className="kv">
+          <dt>是否有账号</dt>
+          <dd>没有账号</dd>
+        </dl>
+      ) : (
+        <dl className="kv">
+          <dt>是否有账号</dt>
+          <dd>有账号</dd>
+          <dt>注册时间</dt>
+          <dd>{formatTime(account.createdAt)}</dd>
+          <dt>最近登录时间</dt>
+          <dd>{formatTime(account.lastLoginAt)}</dd>
+          <dt>设备会话数</dt>
+          <dd>{account.sessions}</dd>
+        </dl>
+      )}
+    </section>
+  );
+}
+
 function Friends({ userId }: { userId: string }) {
   const [open, setOpen] = useState(false);
   const list = useCursorList<FriendRow>(
@@ -372,7 +404,7 @@ export function UserDetailPage() {
           <dd>
             <Text>{user.nickname || '—'}</Text>
           </dd>
-          <dt>注册时间</dt>
+          <dt>资料创建时间</dt>
           <dd>{formatTime(user.createdAt)}</dd>
           <dt>在线</dt>
           <dd>{user.online ? <Badge tone="good">在线</Badge> : <Badge>离线</Badge>}</dd>
@@ -405,6 +437,7 @@ export function UserDetailPage() {
           </dd>
         </dl>
       </section>
+      <AccountPanel user={user} />
       {sessions && (
         <section className="panel">
           <h2>在线设备</h2>

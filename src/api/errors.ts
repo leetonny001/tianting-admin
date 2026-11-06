@@ -77,6 +77,26 @@ export function errorText(err: unknown): string {
   return textForCode(err.code, err.message, err.reason);
 }
 
+/**
+ * 生成邀请码的错误文案：4131、4000 在表里是别的页面的意思（文件行数、通用参数），这里说清楚。其余走表。
+ * 5031 的"操作未执行"走表，不覆盖。
+ */
+export function inviteErrorText(err: unknown): string {
+  if (err instanceof ApiError && err.code === 4131) return '单次最多生成 100 个邀请码';
+  if (err instanceof ApiError && err.code === 4000) {
+    return '可用次数、到期时间或备注不符合要求：可用次数 1～1000，到期时间要晚于现在，备注最多 200 个字';
+  }
+  return errorText(err);
+}
+
+/**
+ * 生成请求的结果是否未知：im-server 可能已经生成，明文只在那次响应里，找不回（console-chat 问题 3）。
+ * 5040 是 console 明确说的；网络断开和网关的 502 同样收不到响应，按最保守的理解一起处理。
+ */
+export function inviteResultUnknown(err: unknown): boolean {
+  return err instanceof ApiError && (err.code === 5040 || err.code === NETWORK || err.code === 5020);
+}
+
 /** 被退出登录的原因（登录页顶部显示）。 */
 export function signedOutText(reason: string | null): string | null {
   switch (reason) {

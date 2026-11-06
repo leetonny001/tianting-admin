@@ -90,6 +90,7 @@ writeFileSync(
         'push.user',
         'push.all',
         'stats.read',
+        'account.invite',
       ],
       // 持有 push.all 必须配，和 CON_PUSH_TEMPLATES 的 type 一致（PRD-live F-PUSH-09 规则 3）。
       pushTypes: ['notice', 'activity'],
@@ -177,6 +178,9 @@ const procs = [
       IM_ADMIN_CALLERS: callers,
       IM_V13_ADMIN_FEATURES: '1',
       IM_PUSH_ENABLED: '1',
+      // 邀请码用例要真实注册；每次注册用一个来源 IP（X-Forwarded-For），不碰每 IP 每小时 20 次的限流。
+      IM_REGISTER_MODE: 'invite',
+      IM_TRUSTED_PROXIES: '127.0.0.1/32,::1/128',
     },
   }),
   spawn(join(work, 'console-server'), [], { stdio: 'inherit', env: consoleEnv }),

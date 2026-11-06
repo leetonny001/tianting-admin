@@ -200,16 +200,20 @@ export function ConfirmDialog({
 
 /** 复制按钮。 */
 export function CopyButton({ text, label = '复制' }: { text: string; label?: string }) {
-  const [done, setDone] = useState(false);
+  const [state, setState] = useState<'idle' | 'done' | 'failed'>('idle');
   return (
     <button
       type="button"
       className="btn btn-small"
       onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => setDone(true));
+        const written = navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('no clipboard'));
+        written.then(
+          () => setState('done'),
+          () => setState('failed'),
+        );
       }}
     >
-      {done ? '已复制' : label}
+      {state === 'done' ? '已复制' : state === 'failed' ? '复制失败，请手动选择' : label}
     </button>
   );
 }

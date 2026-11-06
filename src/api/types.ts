@@ -30,6 +30,35 @@ export interface UserRow {
   ban?: { until: number | null; reason: string; by: string; at: number } | null;
   /** 没有这个键 = 没有禁言；null = 永久。 */
   mutedUntil?: number | null;
+  /** 账号信息（F-ACC-09 规则 5）。这里的 createdAt 才是注册时间，上面的 createdAt 是资料时间。取不到时是 null，同时 accountUnavailable=true。 */
+  account?: AccountInfo | null;
+  accountUnavailable?: boolean;
+}
+
+export interface AccountInfo {
+  hasAccount: boolean;
+  createdAt?: number;
+  lastLoginAt?: number;
+  sessions: number;
+}
+
+/** 邀请码列表的一项：没有明文。 */
+export interface InviteRow {
+  inviteId: string;
+  codeLast4: string;
+  maxUses: number;
+  usedCount: number;
+  expiresAt: number;
+  note?: string;
+  createdBy?: string;
+  createdAt: number;
+  disabledAt?: number;
+  autoDisabled?: boolean;
+}
+
+/** 生成响应的一项：明文只在这里出现一次。 */
+export interface CreatedInvite extends InviteRow {
+  code: string;
 }
 
 export interface GroupRow {

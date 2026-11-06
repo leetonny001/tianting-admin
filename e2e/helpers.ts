@@ -220,6 +220,24 @@ export async function imUsers(users: { userId: string; nickname?: string; avatar
   if (!r.ok) throw new Error(`import ${r.status} ${await r.text()}`);
 }
 
+let nextIp = 0;
+
+/** 走客户端端口（POST /v1/account/*）。每次一个来源 IP，不碰注册限流。 */
+export async function imAccountPost(path: string, body: Record<string, unknown>) {
+  const s = readState();
+  nextIp += 1;
+  const r = await fetch(`http://${s.ws}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Forwarded-For': `198.51.${100 + Math.floor(nextIp / 250)}.${1 + (nextIp % 250)}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await r.text();
+  return { status: r.status, body: (text ? JSON.parse(text) : {}) as Record<string, unknown> };
+}
+
 export async function imGroup(groupId: string, name: string, members: string[]) {
   const s = readState();
   const r = await fetch(`${s.imAdmin}/admin/groups`, {

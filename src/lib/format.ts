@@ -14,6 +14,12 @@ export function formatTime(ms?: number | null): string {
   return dateTime.format(new Date(ms));
 }
 
+/** datetime-local 的值（本地时间）。 */
+export function toLocalInput(ms: number): string {
+  const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60_000);
+  return d.toISOString().slice(0, 16);
+}
+
 /** 和服务端相同的理由规则，前端先挡一次。 */
 export function reasonValid(raw: string): boolean {
   const chars = [...raw.trim()];
@@ -61,6 +67,8 @@ export const actionNames: Record<string, string> = {
   'group.dissolve': '解散群',
   'msg.meta.query': '查询消息元数据',
   'msg.user_convs.query': '查询用户会话列表',
+  'invite.create': '生成邀请码',
+  'invite.disable': '停用邀请码',
   'audit.query': '查询审计',
   'audit.verify': '校验审计链',
   'audit.archive': '归档审计',

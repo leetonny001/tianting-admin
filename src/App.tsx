@@ -8,6 +8,7 @@ import { FriendsBulkPage } from './pages/FriendsBulk';
 import { GroupCreatePage, GroupsPage } from './pages/Groups';
 import { GroupDetailPage } from './pages/GroupDetail';
 import { HomePage, NoPermissionPage } from './pages/Home';
+import { InvitesPage } from './pages/Invites';
 import { MetaPage } from './pages/Meta';
 import { MessageBodyPage } from './pages/MessageBody';
 import { NotificationsPage } from './pages/Notifications';
@@ -68,6 +69,14 @@ export function App() {
         element={
           <Guard perm="user.read">
             <UserDetailPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/invites"
+        element={
+          <Guard perm="account.invite">
+            <InvitesPage />
           </Guard>
         }
       />

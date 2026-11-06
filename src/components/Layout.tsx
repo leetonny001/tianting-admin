@@ -11,6 +11,7 @@ const menu: { to: string; label: string; perm?: string | string[]; end?: boolean
   { to: '/', label: '首页', end: true },
   { to: '/users', label: '用户', perm: 'user.read', end: true },
   { to: '/users/import', label: '用户导入', perm: 'user.import' },
+  { to: '/invites', label: '邀请码', perm: 'account.invite' },
   { to: '/social/friends', label: '好友导入 / 删除', perm: 'social.write' },
   { to: '/social/settings', label: '社交配置', perm: 'social.settings' },
   { to: '/groups', label: '群', perm: 'group.read' },

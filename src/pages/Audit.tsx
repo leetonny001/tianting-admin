@@ -2,16 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api/client';
 import type { AuditRecord } from '../api/types';
 import { Badge, Empty, ErrorNote, Field, Modal, Text } from '../components/ui';
-import { actionNames, formatTime, resultNames } from '../lib/format';
+import { actionNames, formatTime, resultNames, toLocalInput } from '../lib/format';
 
 const DAY = 24 * 3600 * 1000;
 const MAX_DAYS = 31;
-
-/** datetime-local 的值（本地时间）。 */
-function toLocalInput(ms: number): string {
-  const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60_000);
-  return d.toISOString().slice(0, 16);
-}
 
 function targetText(t: AuditRecord['target']): string {
   if (!t?.type && !t?.ids) return '—';
