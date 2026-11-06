@@ -3,6 +3,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import pg from 'pg';
@@ -24,6 +25,27 @@ const ports = {
 // 可识别的固定测试密钥：scripts/check-dist.mjs 和 HAR 扫描都查它们。
 const seed = Buffer.from('tianting-e2e-signing-seed-32byte');
 const legacy = 'tianting-e2e-legacy-key';
+
+// 端口被别的进程占着时直接失败：否则测试可能连到别人的服务，只看到难懂的 401。
+async function assertPortsFree(list) {
+  const busy = await Promise.all(
+    list.map(
+      (port) =>
+        new Promise((done) => {
+          const s = connect({ host: '127.0.0.1', port });
+          s.setTimeout(1000, () => (s.destroy(), done(null)));
+          s.once('connect', () => (s.destroy(), done(port)));
+          s.once('error', () => done(null));
+        }),
+    ),
+  );
+  const taken = busy.filter(Boolean);
+  if (taken.length > 0) {
+    console.error(`e2e ports already in use: ${taken.join(', ')}`);
+    process.exit(1);
+  }
+}
+await assertPortsFree([ports.console, ports.ops, ports.ws, ports.imAdmin]);
 
 const go = (dir, out, pkg) => execFileSync('go', ['build', '-o', join(work, out), pkg], { cwd: dir, stdio: 'inherit' });
 go(imDir, 'im-server', './cmd/im-server');
