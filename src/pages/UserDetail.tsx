@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router';
-import { api } from '../api/client';
-import type { FriendRow, SessionRow, UserRow } from '../api/types';
+import { Link, useNavigate, useParams } from 'react-router';
+import { api, ApiError } from '../api/client';
+import type { FriendRow, SessionRow, UserConvRow, UserGroupRow, UserRow } from '../api/types';
 import { MutedBadge, MuteDialog, UnmuteDialog, untilText } from '../components/Moderation';
 import { Avatar, Badge, ConfirmDialog, Empty, ErrorNote, Field, Text } from '../components/ui';
 import { formatTime } from '../lib/format';
@@ -109,6 +109,168 @@ function Friends({ userId }: { userId: string }) {
             </button>
           )}
         </>
+      )}
+    </section>
+  );
+}
+
+const groupRoleText: Record<string, string> = { owner: '群主', admin: '管理员', member: '成员' };
+
+/** 用户所在群（F-ADM-10 规则 2）：不写审计，打开详情就加载。不含已解散的群。 */
+function UserGroups({ userId }: { userId: string }) {
+  const list = useCursorList<UserGroupRow>(
+    (cursor) =>
+      `/console/api/users/${encodeURIComponent(userId)}/groups${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+    'groups',
+    userId,
+  );
+  return (
+    <section className="panel">
+      <h2>所在群</h2>
+      <ErrorNote error={list.error} />
+      {list.loaded && list.items.length === 0 && <Empty>不在任何群里</Empty>}
+      {list.items.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>群 ID</th>
+              <th>群名</th>
+              <th>群内角色</th>
+              <th>成员数</th>
+              <th>入群时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.items.map((g) => (
+              <tr key={g.groupId}>
+                <td>
+                  <Link to={`/groups/${encodeURIComponent(g.groupId)}`}>
+                    <Text>{g.groupId}</Text>
+                  </Link>
+                </td>
+                <td>
+                  <Text>{g.name}</Text>
+                </td>
+                <td>{groupRoleText[g.role] ?? g.role}</td>
+                <td>{g.memberCount}</td>
+                <td>{formatTime(g.joinedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {list.hasMore && (
+        <button type="button" className="btn more" disabled={list.loading} onClick={list.loadMore}>
+          加载更多
+        </button>
+      )}
+    </section>
+  );
+}
+
+const CONVS_PATH = '/console/api/users/convs/query';
+
+interface ConvPage {
+  convs: UserConvRow[];
+  nextCursor: string;
+}
+
+/**
+ * 用户会话列表（F-ADM-30 规则 1 ③）：打开先填理由，只显示会话 ID、类型、最后活跃时间。
+ * POST：userId 和理由不进 URL。15 分钟内翻页不用再填；过了窗口服务端要理由（4000），这里让用户重新打开。
+ */
+function UserConvs({ userId }: { userId: string }) {
+  const navigate = useNavigate();
+  const [asking, setAsking] = useState(false);
+  const [rows, setRows] = useState<UserConvRow[] | null>(null);
+  const [next, setNext] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [expired, setExpired] = useState(false);
+  const more = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const page = await api<ConvPage>('POST', CONVS_PATH, { userId, cursor: next });
+      setRows([...(rows ?? []), ...page.convs]);
+      setNext(page.nextCursor);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 4000) {
+        setRows(null);
+        setNext('');
+        setExpired(true);
+      } else setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="panel">
+      <h2>会话列表</h2>
+      {expired && (
+        <p className="note note-warn" role="status">
+          已超过 15 分钟，请重新填写理由打开。
+        </p>
+      )}
+      {!rows && (
+        <button className="btn" type="button" onClick={() => setAsking(true)}>
+          查看会话列表
+        </button>
+      )}
+      <ErrorNote error={error} />
+      {rows && rows.length === 0 && <Empty>没有会话</Empty>}
+      {rows && rows.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>会话 ID</th>
+              <th>类型</th>
+              <th>最后活跃</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => (
+              <tr key={c.convId}>
+                <td>
+                  <button
+                    type="button"
+                    className="link mono"
+                    onClick={() => navigate('/messages', { state: { convId: c.convId } })}
+                  >
+                    <Text>{c.convId}</Text>
+                  </button>
+                </td>
+                <td>{c.type === 'c2c' ? '单聊' : c.type === 'group' ? '群聊' : <Text>{c.type}</Text>}</td>
+                <td>{formatTime(c.updatedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {next && (
+        <button type="button" className="btn more" disabled={busy} onClick={() => void more()}>
+          加载更多
+        </button>
+      )}
+      {asking && (
+        <ConfirmDialog
+          title="查看会话列表"
+          needReason
+          confirmLabel="查询"
+          onClose={() => setAsking(false)}
+          onConfirm={async ({ reason, ticket }) => {
+            const page = await api<ConvPage>('POST', CONVS_PATH, {
+              userId,
+              reason,
+              ...(ticket ? { ticket } : {}),
+            });
+            setExpired(false);
+            setRows(page.convs);
+            setNext(page.nextCursor);
+          }}
+        >
+          单聊对方也是社交关系信息，查看会写审计。列表里没有正文和摘要。
+        </ConfirmDialog>
       )}
     </section>
   );
@@ -250,6 +412,8 @@ export function UserDetailPage() {
         </section>
       )}
       {can('social.read') && <Friends userId={user.userId} />}
+      {can('group.read') && <UserGroups userId={user.userId} />}
+      {can('msg.meta') && <UserConvs userId={user.userId} />}
       {dialog === 'kick' && (
         <ConfirmDialog
           title="强制下线"

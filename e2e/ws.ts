@@ -112,3 +112,31 @@ export async function imSend(userId: string, groupId: string, count: number) {
   }
   ws.close();
 }
+
+/** 发一条消息，返回错误码（0 表示成功）。 */
+export async function imTrySend(userId: string, convType: 'group' | 'c2c', to: string, text: string): Promise<number> {
+  const s = state();
+  const r = await fetch(`${s.imAdmin}/admin/users/token`, {
+    method: 'POST',
+    headers: { 'X-Admin-Key': s.legacy, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId }),
+  });
+  const { token } = (await r.json()) as { token: string };
+  const ws = new WebSocket(`ws://${s.ws}/ws?platform=web`);
+  await new Promise((resolve) => ws.addEventListener('open', resolve));
+  const acks = new Map<string, (code: number) => void>();
+  ws.addEventListener('message', (e) => {
+    const f = JSON.parse(String(e.data));
+    if (f.cmd === 'ack') acks.get(f.id)?.(f.error?.code ?? 0);
+  });
+  const call = (id: string, cmd: string, data: unknown) =>
+    new Promise<number>((resolve) => {
+      acks.set(id, resolve);
+      ws.send(JSON.stringify({ id, cmd, data }));
+    });
+  await call('auth', 'auth', { token });
+  const id = `try-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const code = await call(id, 'send', { convType, to, type: 'text', clientMsgId: id, body: { text } });
+  ws.close();
+  return code;
+}

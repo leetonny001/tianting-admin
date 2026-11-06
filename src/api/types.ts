@@ -53,6 +53,25 @@ export interface GroupDetail {
   admins?: string[];
   notice?: string;
   managed: boolean;
+  /** 全群禁言（F-ADM-42）：只用 im-server 返回的值，页面不自己记。 */
+  allMuted?: boolean;
+}
+
+/** 用户所在群的一项（F-ADM-10 规则 2）。 */
+export interface UserGroupRow {
+  groupId: string;
+  name: string;
+  type: string;
+  memberCount: number;
+  role: string;
+  joinedAt: number;
+}
+
+/** 用户会话列表的一项（F-ADM-30 规则 1 ③）：只有这三个字段，没有正文和摘要。 */
+export interface UserConvRow {
+  convId: string;
+  type: string;
+  updatedAt: number;
 }
 
 export interface MemberRow {

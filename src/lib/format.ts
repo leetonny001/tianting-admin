@@ -60,6 +60,7 @@ export const actionNames: Record<string, string> = {
   'group.owner.unset': '收回群主',
   'group.dissolve': '解散群',
   'msg.meta.query': '查询消息元数据',
+  'msg.user_convs.query': '查询用户会话列表',
   'audit.query': '查询审计',
   'audit.verify': '校验审计链',
   'audit.archive': '归档审计',

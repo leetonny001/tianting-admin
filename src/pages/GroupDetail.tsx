@@ -180,7 +180,7 @@ function Members({ groupId, canWrite, refresh }: { groupId: string; canWrite: bo
   );
 }
 
-type Dialog = 'name' | 'history' | 'notice' | 'owner' | 'dissolve' | null;
+type Dialog = 'name' | 'history' | 'notice' | 'owner' | 'dissolve' | 'muteAll' | 'unmuteAll' | null;
 
 export function GroupDetailPage() {
   const { id = '' } = useParams();
@@ -235,6 +235,16 @@ export function GroupDetailPage() {
               查看消息元数据
             </button>
           )}
+          {can('mute.write') &&
+            (group.allMuted ? (
+              <button className="btn" type="button" onClick={() => setDialog('unmuteAll')}>
+                关闭全员禁言
+              </button>
+            ) : (
+              <button className="btn btn-danger" type="button" onClick={() => setDialog('muteAll')}>
+                开启全员禁言
+              </button>
+            ))}
           {can('group.dissolve') && (
             <button className="btn btn-danger" type="button" onClick={() => setDialog('dissolve')}>
               解散群
@@ -257,6 +267,8 @@ export function GroupDetailPage() {
           </dd>
           <dt>成员数</dt>
           <dd>{group.memberCount}</dd>
+          <dt>全员禁言</dt>
+          <dd>{group.allMuted ? <Badge tone="warn">全员禁言中</Badge> : '未开启'}</dd>
           <dt>新成员看历史</dt>
           <dd>{group.historyVisible ? '可以' : '不可以'}</dd>
           <dt>创建时间</dt>
@@ -359,6 +371,28 @@ export function GroupDetailPage() {
           ) : (
             '收回后群变成托管群，没有群主。'
           )}
+        </ConfirmDialog>
+      )}
+      {(dialog === 'muteAll' || dialog === 'unmuteAll') && (
+        <ConfirmDialog
+          title={dialog === 'muteAll' ? '开启全员禁言' : '关闭全员禁言'}
+          needReason
+          danger={dialog === 'muteAll'}
+          confirmLabel={dialog === 'muteAll' ? '开启' : '关闭'}
+          onClose={() => setDialog(null)}
+          onConfirm={async ({ reason, ticket }) => {
+            await api('POST', dialog === 'muteAll' ? '/console/api/mutes' : '/console/api/mutes/release', {
+              scope: 'groupAll',
+              groupId: group.groupId,
+              reason,
+              ...(ticket ? { ticket } : {}),
+            });
+            load();
+          }}
+        >
+          {dialog === 'muteAll'
+            ? '开启后只有群主和管理员能发言，其他成员发言会被拒绝。没有时长，手动关闭前一直生效。'
+            : '关闭后全部成员恢复发言。'}
         </ConfirmDialog>
       )}
       {dialog === 'dissolve' && (

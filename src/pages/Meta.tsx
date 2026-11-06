@@ -78,10 +78,11 @@ export function MetaPage() {
     }
   };
   useEffect(() => {
-    // 从群详情进入：直接查。
+    // 从群详情或用户会话列表进入：群直接查，单聊先填理由（F-ADM-30 规则 3）。
     if (fromState && !started.current) {
       started.current = true;
-      void enter().catch(() => undefined);
+      if (fromState.startsWith('c2c:')) setAsking(true);
+      else void enter().catch(() => undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
