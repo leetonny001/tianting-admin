@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router';
 import { api, ApiError } from '../api/client';
 import type { BodyMessage, BodyPage } from '../api/types';
 import { ConfirmDialog, Empty, ErrorNote, Field, Modal, Text } from '../components/ui';
-import { formatTime, reasonValid } from '../lib/format';
+import { formatBytes, formatTime, reasonValid } from '../lib/format';
 import { useSession } from '../session';
 
 const MAX_DELETE = 50;
@@ -116,9 +116,23 @@ function GrantDialog({
   );
 }
 
-function bodyText(m: BodyMessage): string {
-  if (m.body?.text !== undefined) return m.body.text;
-  return m.body ? JSON.stringify(m.body) : '';
+/**
+ * 正文按纯文本。图片、文件（PRD-chat 第 14.1 节，FE-639）：文件名凭正文授权显示，文件内容不放开——
+ * 只写"不可预览"，不请求、不内联渲染，后台 CSP 不放宽（R-CS-24）。文件名清空（过期）时显示"已过期"。
+ */
+export function bodyText(m: BodyMessage): string {
+  const b = m.body;
+  if (b?.text !== undefined) return b.text;
+  if (m.type === 'file' && b?.file) {
+    if (b.file.expired) return '[文件] 已过期';
+    return `[文件] ${b.file.name || 'file'}，${formatBytes(b.file.size)}（不可预览）`;
+  }
+  if (m.type === 'image' && b?.image) {
+    if (b.image.expired) return '[图片] 已过期';
+    const dims = b.image.width && b.image.height ? `${b.image.width}×${b.image.height}，` : '';
+    return `[图片] ${dims}${formatBytes(b.image.size)}（不可预览）`;
+  }
+  return b ? JSON.stringify(b) : '';
 }
 
 /** 正文按纯文本显示（Text 组件），没有导出、复制按钮（F-ADM-08 规则 7）。 */

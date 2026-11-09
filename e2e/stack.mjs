@@ -21,6 +21,8 @@ const ports = {
   ops: 18191,
   ws: Number(process.env.E2E_IM_WS_PORT ?? 18180),
   imAdmin: Number(process.env.E2E_IM_ADMIN_PORT ?? 18181),
+  // 假 S3（e2e/fake_s3.py）：im-server 打开图片和文件（C2）要对象存储。后台页面本身不连它。
+  s3: Number(process.env.E2E_S3_PORT ?? 18192),
 };
 // 可识别的固定测试密钥：scripts/check-dist.mjs 和 HAR 扫描都查它们。
 const seed = Buffer.from('tianting-e2e-signing-seed-32byte');
@@ -45,7 +47,7 @@ async function assertPortsFree(list) {
     process.exit(1);
   }
 }
-await assertPortsFree([ports.console, ports.ops, ports.ws, ports.imAdmin]);
+await assertPortsFree([ports.console, ports.ops, ports.ws, ports.imAdmin, ports.s3]);
 
 const go = (dir, out, pkg) => execFileSync('go', ['build', '-o', join(work, out), pkg], { cwd: dir, stdio: 'inherit' });
 go(imDir, 'im-server', './cmd/im-server');
@@ -157,12 +159,15 @@ writeFileSync(
     rootCode: code,
     imAdmin: `http://127.0.0.1:${ports.imAdmin}`,
     ws: `127.0.0.1:${ports.ws}`,
+    s3: `http://127.0.0.1:${ports.s3}`,
     legacy,
     clock: Date.now(),
   }),
 );
 
+const s3 = `http://127.0.0.1:${ports.s3}`;
 const procs = [
+  spawn('python3', ['-I', resolve('e2e/fake_s3.py'), '--port', String(ports.s3)], { stdio: 'inherit' }),
   spawn(join(work, 'im-server'), [], {
     stdio: 'inherit',
     env: {
@@ -181,6 +186,15 @@ const procs = [
       // 邀请码用例要真实注册；每次注册用一个来源 IP（X-Forwarded-For），不碰每 IP 每小时 20 次的限流。
       IM_REGISTER_MODE: 'invite',
       IM_TRUSTED_PROXIES: '127.0.0.1/32,::1/128',
+      // 图片和文件（PRD-chat C2，FE-639）：对象存储是上面的假 S3；凭证只是占位。
+      IM_FILES_ENABLED: '1',
+      IM_OBJSTORE_ENDPOINT: s3,
+      IM_OBJSTORE_REGION: 'us-east-1',
+      IM_OBJSTORE_BUCKET: 'chat',
+      IM_OBJSTORE_PUBLIC_BUCKET: 'avatars',
+      IM_OBJSTORE_PUBLIC_BASE_URL: `${s3}/avatars`,
+      IM_OBJSTORE_ACCESS_KEY: 'admin-e2e-fake-s3',
+      IM_OBJSTORE_SECRET_KEY: 'admin-e2e-fake-s3-not-a-secret',
     },
   }),
   spawn(join(work, 'console-server'), [], { stdio: 'inherit', env: consoleEnv }),

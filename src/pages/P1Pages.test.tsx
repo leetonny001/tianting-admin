@@ -268,3 +268,20 @@ describe('用户详情的所在群和会话列表', () => {
     expect(posts('/console/api/messages/meta/query')[0]!.body).toEqual({ convId: 'group:g1' });
   });
 });
+
+describe('元数据页配合文件消息（FE-639，AC-ADM-30-7、PRD-chat 第 14.1 节）', () => {
+  it('图片、文件消息只显示类型和长度，没有文件名（响应里本来就没有）', async () => {
+    install(['msg.meta']);
+    const row = (seq: number, type: string) => ({ seq, msgId: `m${seq}`, from: 'u1', type, bodyLength: 30, ts: 1 });
+    replies['POST /console/api/messages/meta/query'] = [
+      { body: { messages: [row(3, 'file'), row(2, 'image'), row(1, 'text')], hasMore: false } },
+    ];
+    open({ pathname: '/messages', state: { convId: 'group:g1' } });
+    const table = await screen.findByRole('table');
+    const types = within(table)
+      .getAllByRole('row')
+      .slice(1)
+      .map((r) => within(r).getAllByRole('cell')[3]!.textContent);
+    expect(types).toEqual(['文件', '图片', '文本']);
+  });
+});

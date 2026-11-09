@@ -135,7 +135,13 @@ export interface BodyMessage {
   from: string;
   type: string;
   ts: number;
-  body?: { text?: string; data?: unknown };
+  /** image、file（PRD-chat 第 14.1 节）：正文授权下有文件名；文件内容不放开，后台不内联渲染。 */
+  body?: {
+    text?: string;
+    data?: unknown;
+    image?: { fileId?: string; width?: number; height?: number; size?: number; mime?: string; expired?: boolean };
+    file?: { fileId?: string; name?: string; size?: number; mime?: string; expired?: boolean };
+  };
   deleted?: boolean;
   deletedAt?: number;
   deletedBy?: string;

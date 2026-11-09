@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { api } from '../api/client';
 import type { MessageMeta } from '../api/types';
 import { ConfirmDialog, Empty, ErrorNote, Field, Text } from '../components/ui';
-import { formatTime, validConvId } from '../lib/format';
+import { formatTime, messageTypeLabel, validConvId } from '../lib/format';
 import { useSession } from '../session';
 
 const PATH = '/console/api/messages/meta/query';
@@ -90,7 +90,8 @@ export function MetaPage() {
     <>
       <h1>消息元数据</h1>
       <p className="muted">
-        只显示发送时间、发送者、seq、类型和长度，不含正文。查询会写审计；单聊要填理由，每天最多 50 个不同的单聊。
+        只显示发送时间、发送者、seq、类型和长度，不含正文；图片、文件消息也不显示文件名（文件名按正文对待）。查询会写审计；单聊要填理由，每天最多
+        50 个不同的单聊。
       </p>
       <form className="panel filters" onSubmit={submit}>
         <Field
@@ -161,7 +162,7 @@ export function MetaPage() {
                   <Text>{m.from}</Text>
                 </td>
                 <td>
-                  <Text>{m.type}</Text>
+                  <Text>{messageTypeLabel(m.type)}</Text>
                 </td>
                 <td>{m.bodyLength}</td>
                 <td className="nowrap">{formatTime(m.ts)}</td>

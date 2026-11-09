@@ -108,3 +108,22 @@ export const notificationNames: Record<string, string> = {
   'audit.verify_failed': '审计校验失败',
   'audit.anchor_failed': '审计锚定失败',
 };
+
+/** 消息类型的中文名（元数据页、正文页，PRD-chat 第 14.1 节）。不认识的原样显示。 */
+export function messageTypeLabel(type: string): string {
+  return { text: '文本', image: '图片', file: '文件', tip: '群通知', custom: '自定义' }[type] ?? type;
+}
+
+/** 字节数：B、KB、MB、GB，一位小数。 */
+export function formatBytes(n: number | undefined): string {
+  if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return '—';
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let v = n / 1024;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
+  return `${v >= 100 ? Math.round(v) : Math.round(v * 10) / 10} ${units[u]}`;
+}
