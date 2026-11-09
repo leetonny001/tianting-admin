@@ -127,3 +127,12 @@ export function formatBytes(n: number | undefined): string {
   }
   return `${v >= 100 ? Math.round(v) : Math.round(v * 10) / 10} ${units[u]}`;
 }
+
+/**
+ * 元数据页"大小"一列（PRD-chat v1.4 第 14.1 节，P-37 ③）：图片、文件消息显示原文件大小（im-server 的 fileSize，人类可读）；
+ * 其他消息、没有 fileSize 的（已删除、老版本的 im-server）照旧显示正文长度。不显示文件名。
+ */
+export function metaSize(m: { type: string; bodyLength: number; fileSize?: number }): string {
+  if ((m.type === 'image' || m.type === 'file') && typeof m.fileSize === 'number') return formatBytes(m.fileSize);
+  return String(m.bodyLength);
+}

@@ -125,25 +125,20 @@ async function sendAttachment(tok: string, groupId: string, type: 'image' | 'fil
 
 const MARK = 'ZXQ-FILE-ADM';
 
-test('元数据页：图片、文件只有类型和长度，页面和接口响应都没有文件名（FE-639，AC-ADM-30-7）', async ({ page }) => {
+test('元数据页：图片、文件只有类型和大小（v1.4 取 fileSize），页面和接口响应都没有文件名（FE-639，AC-ADM-30-7）', async ({
+  page,
+}) => {
   const problems = watchPage(page);
   const u = uid('fu');
   const g = uid('fg');
   await imUsers([{ userId: u }]);
   await imGroup(g, 'n', [u]);
   const tok = await token(u);
-  await sendAttachment(
-    tok,
-    g,
-    'file',
-    await upload(tok, 'file', `${MARK}-报告.pdf`, Buffer.from('%PDF-1.4 adm'), 'application/pdf'),
-  );
-  await sendAttachment(
-    tok,
-    g,
-    'image',
-    await upload(tok, 'image', `${MARK}.png`, png(64, 48), 'image/png', png(32, 24)),
-  );
+  // 1.2 MB 的文件（1 258 291 字节）：元数据页的"大小"显示原文件大小（PRD-chat v1.4 第 14.1 节，P-37 ③）。
+  const pdf = Buffer.concat([Buffer.from('%PDF-1.4 adm'), Buffer.alloc(1_258_291 - 12, 1)]);
+  const photo = png(64, 48);
+  await sendAttachment(tok, g, 'file', await upload(tok, 'file', `${MARK}-报告.pdf`, pdf, 'application/pdf'));
+  await sendAttachment(tok, g, 'image', await upload(tok, 'image', `${MARK}.png`, photo, 'image/png', png(32, 24)));
   const kf = await provision('kf', 'support');
   await login(page, kf);
   const bodies: string[] = [];
@@ -156,6 +151,13 @@ test('元数据页：图片、文件只有类型和长度，页面和接口响�
   await expect(page.getByRole('row')).toHaveCount(3);
   const types = await page.getByRole('row').evaluateAll((rows) => rows.slice(1).map((r) => r.children[3]!.textContent));
   expect(types).toEqual(['图片', '文件']);
+  const sizes = await page.getByRole('row').evaluateAll((rows) => rows.slice(1).map((r) => r.children[4]!.textContent));
+  expect(sizes).toEqual([
+    photo.length < 1024 ? `${photo.length} B` : `${Math.round(photo.length / 102.4) / 10} KB`,
+    '1.2 MB',
+  ]);
+  const metaBodies = bodies.filter((b) => b.includes('"bodyLength"'));
+  expect(metaBodies.join('\n')).toContain(`"fileSize":${pdf.length}`);
   await expect(page.locator('body')).not.toContainText(MARK);
   expect(bodies.join('\n')).not.toContain(MARK);
   expect(problems).toEqual([]);

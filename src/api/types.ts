@@ -122,6 +122,8 @@ export interface MessageMeta {
   from: string;
   type: string;
   bodyLength: number;
+  /** 图片、文件消息的原文件字节数（PRD-chat v1.4 第 14.1 节，P-37 ③）；其他消息、已删除的没有。 */
+  fileSize?: number;
   ts: number;
   deleted?: boolean;
   deletedAt?: number;

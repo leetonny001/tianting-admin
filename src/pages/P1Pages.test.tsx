@@ -284,4 +284,39 @@ describe('元数据页配合文件消息（FE-639，AC-ADM-30-7、PRD-chat 第 1
       .map((r) => within(r).getAllByRole('cell')[3]!.textContent);
     expect(types).toEqual(['文件', '图片', '文本']);
   });
+
+  it('v1.4（P-37 ③）：图片、文件的"大小"显示 fileSize（人类可读），其他消息、已删除的照旧显示正文长度', async () => {
+    install(['msg.meta']);
+    const row = (seq: number, type: string, more: object = {}) => ({
+      seq,
+      msgId: `m${seq}`,
+      from: 'u1',
+      type,
+      bodyLength: 30,
+      ts: 1,
+      ...more,
+    });
+    replies['POST /console/api/messages/meta/query'] = [
+      {
+        body: {
+          messages: [
+            row(4, 'file', { fileSize: 1_258_291 }),
+            row(3, 'image', { fileSize: 2048 }),
+            row(2, 'image', { bodyLength: 0, deleted: true, deletedAt: 1, deletedBy: 'adm' }),
+            row(1, 'text', { bodyLength: 12 }),
+          ],
+          hasMore: false,
+        },
+      },
+    ];
+    open({ pathname: '/messages', state: { convId: 'group:g1' } });
+    const table = await screen.findByRole('table');
+    const header = within(table).getAllByRole('columnheader')[4]!.textContent;
+    expect(header).toBe('大小');
+    const sizes = within(table)
+      .getAllByRole('row')
+      .slice(1)
+      .map((r) => within(r).getAllByRole('cell')[4]!.textContent);
+    expect(sizes).toEqual(['1.2 MB', '2 KB', '0', '12']);
+  });
 });

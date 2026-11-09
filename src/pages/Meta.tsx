@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { api } from '../api/client';
 import type { MessageMeta } from '../api/types';
 import { ConfirmDialog, Empty, ErrorNote, Field, Text } from '../components/ui';
-import { formatTime, messageTypeLabel, validConvId } from '../lib/format';
+import { formatTime, messageTypeLabel, metaSize, validConvId } from '../lib/format';
 import { useSession } from '../session';
 
 const PATH = '/console/api/messages/meta/query';
@@ -146,7 +146,7 @@ export function MetaPage() {
               <th>msgId</th>
               <th>发送者</th>
               <th>类型</th>
-              <th>正文长度</th>
+              <th>大小</th>
               <th>时间</th>
               <th>状态</th>
             </tr>
@@ -164,7 +164,7 @@ export function MetaPage() {
                 <td>
                   <Text>{messageTypeLabel(m.type)}</Text>
                 </td>
-                <td>{m.bodyLength}</td>
+                <td className="nowrap">{metaSize(m)}</td>
                 <td className="nowrap">{formatTime(m.ts)}</td>
                 <td>
                   {m.deleted && (
