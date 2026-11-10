@@ -154,7 +154,7 @@ describe('TC-RCL-04-03 正文页的撤回、引用和提及（AC-RCL-04-3，FE-6
     body: { messages, hasMore: false, grantPrefix: 'abcd1234', expiresAt: T },
   });
 
-  it('TC-RCL-04-03 普通授权：撤回的显示"该消息已被撤回（撤回人，时间）"、没有正文；和删除分开；勾选删除照旧', async () => {
+  it('TC-RCL-04-03 普通授权：撤回的显示"该消息已被撤回（撤回人，时间）"、没有正文；和删除分开；撤回的不能勾选', async () => {
     install(['msg.read.group', 'msg.delete']);
     replies['POST /console/api/messages/body'] = [
       page([
@@ -169,11 +169,111 @@ describe('TC-RCL-04-03 正文页的撤回、引用和提及（AC-RCL-04-3，FE-6
     expect(screen.getByText(para(`该消息已被删除（console:adm，${formatTime(T + 6000)}）`))).toBeVisible();
     expect(screen.getByText('hello')).toBeVisible();
     expect(document.body.textContent).not.toContain('ZXQ-NOT-SHOWN');
-    // 撤回的仍可勾选删除（后台删除已撤回的是幂等的，AC-RCL-04-1）；已删除的不能。
-    expect(screen.getByLabelText('选择第 3 条')).toBeEnabled();
+    // 撤回的、已删除的都不能勾选（P-44 ②，问题 29）。
+    expect(screen.getByLabelText('选择第 3 条')).toBeDisabled();
+    expect(screen.getByLabelText('选择第 1 条')).toBeEnabled();
     expect(screen.getByLabelText('选择第 2 条')).toBeDisabled();
     expect(screen.queryByRole('button', { name: '下载查看' })).toBeNull();
     expect(posts('/console/api/messages/body')[0]!.body).toEqual({ convId: 'group:g1' });
+  });
+
+  it('TC-RCL-04-01 问题 29：撤回的复选框禁用并说明原因；全选跳过撤回的；删除请求和提示只含没撤回的', async () => {
+    install(['msg.read.group', 'msg.delete']);
+    const rows = [
+      msg(5, { body: { text: 'five' } }),
+      msg(4, { recalled: true, recalledAt: T + 1000, recalledBy: 'u1' }),
+      msg(3, { body: { text: 'three' } }),
+      msg(2, { deleted: true, deletedAt: T + 2000, deletedBy: 'console:adm' }),
+      msg(1, { type: 'tip', body: { text: 'tip' } }),
+    ];
+    replies['POST /console/api/messages/body'] = [page(rows), page(rows)];
+    replies['POST /console/api/messages/delete'] = [{ body: {} }];
+    open('/messages/body', { convId: 'group:g1' });
+    const recalled = await screen.findByLabelText('选择第 4 条');
+    expect(recalled).toBeDisabled();
+    expect(recalled).toHaveAccessibleDescription('已撤回的消息不能删除');
+    expect(screen.getByLabelText('选择第 2 条')).not.toHaveAccessibleDescription('已撤回的消息不能删除');
+    // 点禁用的复选框不会选中。
+    await userEvent.click(recalled);
+    expect(recalled).not.toBeChecked();
+
+    const all = screen.getByRole('checkbox', { name: /全选/ });
+    await userEvent.click(all);
+    expect(all).toBeChecked();
+    expect(screen.getByLabelText('选择第 5 条')).toBeChecked();
+    expect(screen.getByLabelText('选择第 3 条')).toBeChecked();
+    expect(recalled).not.toBeChecked();
+    expect(screen.getByLabelText('选择第 2 条')).not.toBeChecked();
+    expect(screen.getByLabelText('选择第 1 条')).not.toBeChecked();
+    const del = screen.getByRole('button', { name: '删除所选（2）' });
+
+    await userEvent.click(del);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain('将删除选中的 2 条消息');
+    await userEvent.type(within(dialog).getByLabelText('理由'), '违规内容处理');
+    await userEvent.click(within(dialog).getByRole('button', { name: '删除' }));
+    expect(await screen.findByText('已删除 2 条，不再显示')).toBeVisible();
+    const req = posts('/console/api/messages/delete');
+    expect(req).toHaveLength(1);
+    expect(req[0]!.body!.msgIds).toEqual(['m5', 'm3']);
+    expect(req[0]!.body!.msgIds).not.toContain('m4');
+
+    // 再点一次全选取消全部。
+    await userEvent.click(all);
+    await userEvent.click(all);
+    expect(all).not.toBeChecked();
+    expect(screen.getByRole('button', { name: '删除所选（0）' })).toBeDisabled();
+  });
+
+  it('TC-RCL-04-01 问题 29：全选的 50 条名额不被撤回的占用', async () => {
+    install(['msg.read.group', 'msg.delete']);
+    const rows = [
+      msg(60, { recalled: true, recalledAt: T, recalledBy: 'u1' }),
+      ...Array.from({ length: 55 }, (_, i) => msg(55 - i, { body: { text: `t${55 - i}` } })),
+    ];
+    replies['POST /console/api/messages/body'] = [page(rows)];
+    open('/messages/body', { convId: 'group:g1' });
+    await userEvent.click(await screen.findByRole('checkbox', { name: /全选/ }));
+    expect(screen.getByRole('button', { name: '删除所选（50）' })).toBeEnabled();
+    expect(screen.getByLabelText('选择第 60 条')).not.toBeChecked();
+    expect(screen.getByLabelText('选择第 6 条')).toBeChecked();
+    expect(screen.getByLabelText('选择第 5 条')).not.toBeChecked();
+  });
+
+  it('TC-RCL-04-01 问题 29：勾选后重新授权、重新加载时变成撤回的，不进删除请求，也不计数', async () => {
+    install(['msg.read.group', 'msg.delete']);
+    const first = { messages: [msg(3, { body: { text: 'c' } }), msg(2, { body: { text: 'b' } })] };
+    replies['POST /console/api/messages/body'] = [
+      { body: { ...first, hasMore: true, grantPrefix: 'abcd1234', expiresAt: T } },
+      // 授权过期：加载更早的时候 4039，重新授权后整页重拉，第 2 条这时已经撤回。
+      { status: 403, body: { code: 4039 } },
+      page([
+        msg(3, { body: { text: 'c' } }),
+        msg(2, { recalled: true, recalledAt: T, recalledBy: 'u1' }),
+        msg(1, { body: { text: 'a' } }),
+      ]),
+    ];
+    replies['POST /console/api/messages/grants'] = [{ body: { grantPrefix: 'abcd1234', expiresAt: T } }];
+    replies['POST /console/api/messages/delete'] = [{ body: {} }];
+    open('/messages/body', { convId: 'group:g1' });
+    await userEvent.click(await screen.findByLabelText('选择第 3 条'));
+    await userEvent.click(screen.getByLabelText('选择第 2 条'));
+    expect(screen.getByRole('button', { name: '删除所选（2）' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: '加载更早的' }));
+    const grant = await screen.findByRole('dialog');
+    await userEvent.type(within(grant).getByLabelText('工单号'), 'T-29');
+    await userEvent.type(within(grant).getByLabelText('理由'), '违规内容处理');
+    await userEvent.type(within(grant).getByLabelText('动态码'), '123456');
+    await userEvent.click(within(grant).getByRole('button', { name: '查看' }));
+    await screen.findByLabelText('选择第 1 条');
+    expect(screen.getByLabelText('选择第 2 条')).toBeDisabled();
+    expect(screen.getByLabelText('选择第 2 条')).not.toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: '删除所选（1）' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('理由'), '违规内容处理');
+    await userEvent.click(within(dialog).getByRole('button', { name: '删除' }));
+    expect(await screen.findByText('已删除 1 条，不再显示')).toBeVisible();
+    expect(posts('/console/api/messages/delete')[0]!.body!.msgIds).toEqual(['m3']);
   });
 
   it('TC-RCL-04-03 隔离授权：显示撤回原文和撤回人；正文页没有删除', async () => {

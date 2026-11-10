@@ -132,6 +132,19 @@ test('TC-RCL-04-03 TC-RCL-04-09 正文页：普通授权显示撤回文案、引
   await expect(page.getByText(/该消息已被删除/)).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText(SECRET);
   await expect(page.getByRole('button', { name: '下载查看' })).toHaveCount(0);
+  // 问题 29（P-44 ②）：撤回的不能勾选删除，说明原因；全选跳过撤回的。
+  const recalledBoxes = page
+    .locator('.body-row')
+    .filter({ hasText: /该消息已被撤回/ })
+    .getByRole('checkbox');
+  await expect(recalledBoxes).toHaveCount(3);
+  await page.getByRole('checkbox', { name: /全选/ }).check();
+  for (const box of await recalledBoxes.all()) {
+    await expect(box).toBeDisabled();
+    await expect(box).not.toBeChecked();
+    await expect(box).toHaveAccessibleDescription('已撤回的消息不能删除');
+  }
+  await expect(page.getByRole('button', { name: /^删除所选（[1-9]\d*）$/ })).toBeEnabled();
 
   // 隔离授权：原文（AC-RCL-04-3 后半）和撤回人；撤回的文件、图片可以经代理下载（AC-RCL-04-9）。
   await page.goto('/messages');

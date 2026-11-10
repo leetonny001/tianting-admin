@@ -9,6 +9,14 @@ import { useSession } from '../session';
 
 const MAX_DELETE = 50;
 
+/**
+ * 能不能勾选删除：已删除的、群通知不能；已撤回的也不能（P-44 ②，frontend-chat.md 问题 29）——
+ * 后台删除已撤回的是幂等 200、状态仍是撤回，勾了会让"已删除 N 条"和实际不符。
+ */
+export function deletable(m: BodyMessage): boolean {
+  return !m.deleted && !m.recalled && m.type !== 'tip';
+}
+
 /** 水印：账号名 + 当前时间到分钟 + 授权 ID 前 8 位。用于追溯，不作为防泄露手段（F-ADM-08 规则 6）。 */
 export function watermarkText(username: string, nowMs: number, grantPrefix: string): string {
   const d = new Date(nowMs);
@@ -271,6 +279,11 @@ export function MessageBodyPage() {
     );
   }
   const canDelete = !quarantine && can('msg.delete');
+  // 只算当前还能删的：重新加载后变成撤回、删除的不进请求，提示的条数和请求一致。
+  const picked = rows.filter((m) => deletable(m) && selected.has(m.msgId)).map((m) => m.msgId);
+  const candidates = rows.filter(deletable).slice(0, MAX_DELETE);
+  const allPicked = candidates.length > 0 && candidates.every((m) => selected.has(m.msgId));
+  const toggleAll = () => setSelected(allPicked ? new Set() : new Set(candidates.map((m) => m.msgId)));
   const toggle = (id: string) => {
     setSelected((old) => {
       const next = new Set(old);
@@ -288,13 +301,23 @@ export function MessageBodyPage() {
         </h1>
         {canDelete && (
           <div className="actions">
+            <label>
+              <input
+                type="checkbox"
+                checked={allPicked}
+                disabled={candidates.length === 0}
+                title="已撤回、已删除的消息和群通知不会选中"
+                onChange={toggleAll}
+              />{' '}
+              全选（最多 {MAX_DELETE} 条）
+            </label>
             <button
               className="btn btn-danger"
               type="button"
-              disabled={selected.size === 0}
+              disabled={picked.length === 0}
               onClick={() => setDeleting(true)}
             >
-              删除所选（{selected.size}）
+              删除所选（{picked.length}）
             </button>
           </div>
         )}
@@ -310,7 +333,7 @@ export function MessageBodyPage() {
         {grantPrefix && <Watermark username={session?.account.username ?? ''} grantPrefix={grantPrefix} />}
         {rows.length === 0 && !busy && !needGrant && !error && <Empty>没有消息</Empty>}
         {rows.map((m) => {
-          const selectable = canDelete && !m.deleted && m.type !== 'tip';
+          const selectable = canDelete && deletable(m);
           return (
             <article className="body-row" key={m.seq}>
               {canDelete && (
@@ -318,7 +341,8 @@ export function MessageBodyPage() {
                   type="checkbox"
                   aria-label={`选择第 ${m.seq} 条`}
                   disabled={!selectable}
-                  checked={selected.has(m.msgId)}
+                  title={m.recalled && !m.deleted ? '已撤回的消息不能删除' : undefined}
+                  checked={selectable && selected.has(m.msgId)}
                   onChange={() => toggle(m.msgId)}
                 />
               )}
@@ -414,17 +438,17 @@ export function MessageBodyPage() {
           onConfirm={async ({ reason, ticket }) => {
             await api('POST', '/console/api/messages/delete', {
               convId,
-              msgIds: [...selected],
+              msgIds: picked,
               reason,
               ...(ticket ? { ticket } : {}),
             });
-            setNotice(`已删除 ${selected.size} 条，不再显示`);
+            setNotice(`已删除 ${picked.length} 条，不再显示`);
             setSelected(new Set());
             await fetchPage();
           }}
         >
           <p>
-            将删除选中的 {selected.size}{' '}
+            将删除选中的 {picked.length}{' '}
             条消息。用户那边显示"该消息已被删除"；已经展示的系统推送通知无法撤回，原文加密保存 30 天。
           </p>
         </ConfirmDialog>
