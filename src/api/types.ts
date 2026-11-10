@@ -128,6 +128,26 @@ export interface MessageMeta {
   deleted?: boolean;
   deletedAt?: number;
   deletedBy?: string;
+  /** 撤回（PRD-chat C4，AC-RCL-04-7，CS-204）：和后台删除分开；撤回的没有 fileSize、文件名、引用文字。 */
+  recalled?: boolean;
+  recalledAt?: number;
+  recalledBy?: string;
+}
+
+/** 下行的引用（PRD-chat F-QUO-02）：服务端组装；recalled、deleted、expired 没有原文。 */
+export interface QuoteRef {
+  msgId?: string;
+  seq?: number;
+  from?: string;
+  type?: string;
+  state?: string;
+  text?: string;
+}
+
+/** 提及（PRD-chat F-MEN-01）：真正的提醒只看这里，不解析文本。 */
+export interface Mentions {
+  userIds?: string[];
+  all?: boolean;
 }
 
 /** 正文页的一条消息（只在 MessageBody 页面用）。 */
@@ -143,10 +163,17 @@ export interface BodyMessage {
     data?: unknown;
     image?: { fileId?: string; width?: number; height?: number; size?: number; mime?: string; expired?: boolean };
     file?: { fileId?: string; name?: string; size?: number; mime?: string; expired?: boolean };
+    quote?: QuoteRef;
+    mentions?: Mentions;
   };
+  /** 只表示后台删除（RC2-21）；撤回的是 deleted 没有、recalled=true。 */
   deleted?: boolean;
   deletedAt?: number;
   deletedBy?: string;
+  /** 撤回（CS-204）：普通正文授权没有 body，隔离授权有原文（AC-RCL-04-3）。 */
+  recalled?: boolean;
+  recalledAt?: number;
+  recalledBy?: string;
 }
 
 export interface BodyPage {

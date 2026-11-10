@@ -67,6 +67,7 @@ export const actionNames: Record<string, string> = {
   'group.dissolve': '解散群',
   'msg.meta.query': '查询消息元数据',
   'msg.user_convs.query': '查询用户会话列表',
+  'msg.file.fetch': '取隔离文件',
   'invite.create': '生成邀请码',
   'invite.disable': '停用邀请码',
   'audit.query': '查询审计',

@@ -69,26 +69,43 @@ async function send(method: string, path: string, body: unknown, opts: CallOptio
   }
 }
 
-async function parse<T>(resp: Response): Promise<T> {
+async function readJSON(resp: Response): Promise<Record<string, unknown>> {
   const text = await resp.text();
-  let data: Record<string, unknown> = {};
   try {
-    data = text ? JSON.parse(text) : {};
+    return text ? JSON.parse(text) : {};
   } catch {
     // 反向代理的错误页不是 JSON
+    return {};
   }
-  if (!resp.ok) {
-    const code = typeof data.code === 'number' ? data.code : resp.status * 10;
-    throw new ApiError(
-      resp.status,
-      code,
-      String(data.msg ?? ''),
-      data.reason as string | undefined,
-      data.details as Record<string, unknown> | undefined,
-    );
-  }
+}
+
+function toError(resp: Response, data: Record<string, unknown>): ApiError {
+  const code = typeof data.code === 'number' ? data.code : resp.status * 10;
+  return new ApiError(
+    resp.status,
+    code,
+    String(data.msg ?? ''),
+    data.reason as string | undefined,
+    data.details as Record<string, unknown> | undefined,
+  );
+}
+
+async function parse<T>(resp: Response): Promise<T> {
+  const data = await readJSON(resp);
+  if (!resp.ok) throw toError(resp, data);
   if (typeof data.csrfToken === 'string') csrfToken = data.csrfToken;
   return data as T;
+}
+
+/** 成功是字节流（取文件，CS-202）：错误仍是 JSON，按同样的码处理。 */
+async function parseBlob(resp: Response): Promise<Blob> {
+  if (!resp.ok) throw toError(resp, await readJSON(resp));
+  try {
+    return await resp.blob();
+  } catch {
+    // 状态码 200 已经发出、传到一半断了（console 问题 17）：按网络错误，页面不保存残缺的文件。
+    throw new ApiError(resp.status, NETWORK, 'incomplete');
+  }
 }
 
 export async function refreshSession<T = unknown>(opts: CallOptions = {}): Promise<T> {
@@ -101,13 +118,31 @@ export async function api<T = Record<string, unknown>>(
   body?: unknown,
   opts: CallOptions = {},
 ): Promise<T> {
+  return call(method, path, body, opts, (resp) => parse<T>(resp));
+}
+
+/**
+ * 和 api 相同（CSRF、4014、4037 重放、4038 step-up），成功时返回字节（Blob）。
+ * 用于经 console-server 代理取文件（CS-202）：响应是 attachment，页面不内联渲染。
+ */
+export async function apiBlob(method: string, path: string, body?: unknown, opts: CallOptions = {}): Promise<Blob> {
+  return call(method, path, body, opts, parseBlob);
+}
+
+async function call<T>(
+  method: string,
+  path: string,
+  body: unknown,
+  opts: CallOptions,
+  read: (resp: Response) => Promise<T>,
+): Promise<T> {
   // 刷新页面后内存里没有令牌：写操作之前先取（AC-CON-05-10）。
   if (!isSafe(method) && !csrfToken && !opts.raw) await refreshSession().catch(() => undefined);
   let replayedCsrf = false;
   let replayedStepUp = false;
   for (;;) {
     try {
-      return await parse<T>(await send(method, path, body, opts));
+      return await read(await send(method, path, body, opts));
     } catch (err) {
       if (!(err instanceof ApiError) || opts.raw) throw err;
       if (err.code === 4014) {

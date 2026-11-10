@@ -153,6 +153,7 @@ test('一次完整流程的 HAR 里没有 IM 密钥和签名头（AC-CON-10-1）
     'X-IM-Signature',
     'X-IM-Caller',
     'tianting-e2e-legacy-key',
+    'tianting-admin-e2e-quarantine-key',
     seed.toString(),
     seed.toString('base64'),
   ]) {

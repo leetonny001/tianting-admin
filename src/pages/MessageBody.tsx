@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router';
-import { api, ApiError } from '../api/client';
-import type { BodyMessage, BodyPage } from '../api/types';
+import { api, apiBlob, ApiError } from '../api/client';
+import type { BodyMessage, BodyPage, Mentions, QuoteRef } from '../api/types';
 import { ConfirmDialog, Empty, ErrorNote, Field, Modal, Text } from '../components/ui';
+import { downloadName, saveBlob } from '../lib/download';
 import { formatBytes, formatTime, reasonValid } from '../lib/format';
 import { useSession } from '../session';
 
@@ -135,6 +136,49 @@ export function bodyText(m: BodyMessage): string {
   return b ? JSON.stringify(b) : '';
 }
 
+/**
+ * 引用的摘要（PRD-chat F-QUO-02 规则 2、3）：normal 用服务端组装的 text；recalled、deleted、expired 没有原文。
+ * 按纯文本显示，不做跳转。
+ */
+export function quoteText(q: QuoteRef): string {
+  switch (q.state ?? 'normal') {
+    case 'normal':
+      return q.text ?? '';
+    case 'recalled':
+      return '引用内容已被撤回';
+    case 'deleted':
+      return '引用内容已被删除';
+    case 'expired':
+      return q.type === 'image' ? '[图片] 已过期' : '[文件] 已过期';
+    default:
+      return '引用内容不可用';
+  }
+}
+
+/** 被 @ 的 userId 列表（F-MEN-01：提醒只看 mentions，不解析文本）；all 显示"所有人"。 */
+export function mentionText(m: Mentions): string {
+  const ids = [...new Set(m.userIds ?? [])];
+  return [...(m.all ? ['所有人'] : []), ...ids].join('、');
+}
+
+/**
+ * 可以经代理下载查看的附件（FE-671 第 3 条，AC-RCL-04-9）：只在隔离模式，只给撤回或后台删除的图片、文件，
+ * 过期的没有。没有 fileId 的也没有。
+ */
+export function fetchable(
+  m: BodyMessage,
+  quarantine: boolean,
+): { kind: 'image' | 'file'; fileId: string; name: (blobType: string) => string } | null {
+  if (!quarantine || !(m.recalled || m.deleted)) return null;
+  const kind = m.type === 'image' ? 'image' : m.type === 'file' ? 'file' : null;
+  if (!kind) return null;
+  const att = kind === 'image' ? m.body?.image : m.body?.file;
+  if (!att?.fileId || att.expired) return null;
+  const name = kind === 'file' ? m.body?.file?.name : undefined;
+  // 图片的扩展名按类型：正文里没有 mime 时用代理响应的 Content-Type（console 用 im-server 记录的类型）。
+  return { kind, fileId: att.fileId, name: (blobType) => downloadName(kind, m.seq, name, att.mime || blobType) };
+}
+
 /** 正文按纯文本显示（Text 组件），没有导出、复制按钮（F-ADM-08 规则 7）。 */
 export function MessageBodyPage() {
   const location = useLocation();
@@ -152,6 +196,10 @@ export function MessageBodyPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState('');
+  const [downloading, setDownloading] = useState('');
+  const [dlError, setDlError] = useState<unknown>(null);
+  // 没有授权（4039）时先弹授权框，授权后接着下载这一个。
+  const pendingDownload = useRef<BodyMessage | null>(null);
   const started = useRef(false);
 
   const fetchPage = useCallback(
@@ -185,6 +233,32 @@ export function MessageBodyPage() {
       void fetchPage();
     }
   }, [convId, fetchPage]);
+
+  /**
+   * 下载查看（CS-202）：POST，fileId 在路径里，会话和消息 ID 在请求体里；文件名不进 URL。
+   * 字节进内存后交给浏览器另存（attachment），页面不内联渲染，CSP 不放宽。
+   */
+  const download = async (m: BodyMessage) => {
+    const f = fetchable(m, quarantine);
+    if (!f || downloading) return;
+    setDownloading(m.msgId);
+    setDlError(null);
+    try {
+      const blob = await apiBlob('POST', `/console/api/files/${encodeURIComponent(f.fileId)}/fetch`, {
+        convId,
+        msgId: m.msgId,
+        variant: 'original',
+      });
+      saveBlob(blob, f.name(blob.type));
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 4039) {
+        pendingDownload.current = m;
+        setNeedGrant(true);
+      } else setDlError(err);
+    } finally {
+      setDownloading('');
+    }
+  };
 
   if (!convId) {
     return (
@@ -231,6 +305,7 @@ export function MessageBodyPage() {
         </p>
       )}
       {c2cDisabled ? <p className="note note-warn">单聊正文查看未开启</p> : <ErrorNote error={error} />}
+      <ErrorNote error={dlError} />
       <section className="body-area">
         {grantPrefix && <Watermark username={session?.account.username ?? ''} grantPrefix={grantPrefix} />}
         {rows.length === 0 && !busy && !needGrant && !error && <Empty>没有消息</Empty>}
@@ -251,19 +326,50 @@ export function MessageBodyPage() {
                 <p className="muted">
                   #{m.seq} <Text>{m.from}</Text> {formatTime(m.ts)}
                 </p>
-                {m.deleted && !quarantine ? (
+                {m.recalled && !quarantine ? (
+                  <p className="deleted">
+                    该消息已被撤回（<Text>{m.recalledBy ?? ''}</Text>，{formatTime(m.recalledAt)}）
+                  </p>
+                ) : m.deleted && !quarantine ? (
                   <p className="deleted">
                     该消息已被删除（<Text>{m.deletedBy ?? ''}</Text>，{formatTime(m.deletedAt)}）
                   </p>
                 ) : (
-                  <p className="body-text">
-                    <Text>{bodyText(m)}</Text>
+                  <>
+                    {m.body?.quote && (
+                      <p className="muted quote-line">
+                        <Text>{`引用：${quoteText(m.body.quote)}`}</Text>
+                      </p>
+                    )}
+                    <p className="body-text">
+                      <Text>{bodyText(m)}</Text>
+                    </p>
+                    {m.body?.mentions && mentionText(m.body.mentions) && (
+                      <p className="muted">
+                        <Text>{`提及：${mentionText(m.body.mentions)}`}</Text>
+                      </p>
+                    )}
+                  </>
+                )}
+                {m.recalled && quarantine && (
+                  <p className="muted">
+                    撤回人 <Text>{m.recalledBy ?? ''}</Text>，{formatTime(m.recalledAt)}
                   </p>
                 )}
                 {m.deleted && quarantine && (
                   <p className="muted">
                     删除人 <Text>{m.deletedBy ?? ''}</Text>，{formatTime(m.deletedAt)}
                   </p>
+                )}
+                {fetchable(m, quarantine) && (
+                  <button
+                    type="button"
+                    className="btn btn-small"
+                    disabled={downloading !== ''}
+                    onClick={() => void download(m)}
+                  >
+                    {downloading === m.msgId ? '下载中…' : '下载查看'}
+                  </button>
                 )}
               </div>
             </article>
@@ -284,11 +390,17 @@ export function MessageBodyPage() {
         <GrantDialog
           convId={convId}
           quarantine={quarantine}
-          onClose={() => setNeedGrant(false)}
+          onClose={() => {
+            pendingDownload.current = null;
+            setNeedGrant(false);
+          }}
           onDone={async () => {
             setNeedGrant(false);
+            const pending = pendingDownload.current;
+            pendingDownload.current = null;
             setRows([]);
             await fetchPage();
+            if (pending) await download(pending);
           }}
         />
       )}

@@ -182,6 +182,9 @@ const procs = [
       IM_ADMIN_KEY: legacy,
       IM_ADMIN_CALLERS: callers,
       IM_V13_ADMIN_FEATURES: '1',
+      // 撤回、引用、@（PRD-chat C4，FE-671）：撤回的原文加密进隔离区，密钥没有开发默认值；这里是可识别的测试值。
+      IM_MSG_ACTIONS_ENABLED: '1',
+      IM_QUARANTINE_KEY: 'tianting-admin-e2e-quarantine-key-0123456789',
       IM_PUSH_ENABLED: '1',
       // 邀请码用例要真实注册；每次注册用一个来源 IP（X-Forwarded-For），不碰每 IP 每小时 20 次的限流。
       IM_REGISTER_MODE: 'invite',

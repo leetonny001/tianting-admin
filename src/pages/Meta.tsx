@@ -167,6 +167,12 @@ export function MetaPage() {
                 <td className="nowrap">{metaSize(m)}</td>
                 <td className="nowrap">{formatTime(m.ts)}</td>
                 <td>
+                  {/* 撤回和后台删除分开显示（AC-RCL-04-7）；撤回的同样没有文件名、引用文字（响应里本来就没有）。 */}
+                  {m.recalled && (
+                    <div>
+                      已撤回（<Text>{m.recalledBy ?? ''}</Text>，{formatTime(m.recalledAt)}）
+                    </div>
+                  )}
                   {m.deleted && (
                     <>
                       已删除（<Text>{m.deletedBy ?? ''}</Text>，{formatTime(m.deletedAt)}）

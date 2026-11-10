@@ -13,6 +13,8 @@ const bad = [
   '/admin/groups',
   'tianting-e2e-signing-seed',
   'tianting-e2e-legacy-key',
+  'tianting-admin-e2e-quarantine-key',
+  '/admin/files',
 ];
 const problems = [];
 const walk = (dir) => {
