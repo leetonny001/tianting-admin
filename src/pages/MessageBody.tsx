@@ -281,9 +281,6 @@ export function MessageBodyPage() {
   const canDelete = !quarantine && can('msg.delete');
   // 只算当前还能删的：重新加载后变成撤回、删除的不进请求，提示的条数和请求一致。
   const picked = rows.filter((m) => deletable(m) && selected.has(m.msgId)).map((m) => m.msgId);
-  const candidates = rows.filter(deletable).slice(0, MAX_DELETE);
-  const allPicked = candidates.length > 0 && candidates.every((m) => selected.has(m.msgId));
-  const toggleAll = () => setSelected(allPicked ? new Set() : new Set(candidates.map((m) => m.msgId)));
   const toggle = (id: string) => {
     setSelected((old) => {
       const next = new Set(old);
@@ -301,16 +298,6 @@ export function MessageBodyPage() {
         </h1>
         {canDelete && (
           <div className="actions">
-            <label>
-              <input
-                type="checkbox"
-                checked={allPicked}
-                disabled={candidates.length === 0}
-                title="已撤回、已删除的消息和群通知不会选中"
-                onChange={toggleAll}
-              />{' '}
-              全选（最多 {MAX_DELETE} 条）
-            </label>
             <button
               className="btn btn-danger"
               type="button"

@@ -177,7 +177,7 @@ describe('TC-RCL-04-03 正文页的撤回、引用和提及（AC-RCL-04-3，FE-6
     expect(posts('/console/api/messages/body')[0]!.body).toEqual({ convId: 'group:g1' });
   });
 
-  it('TC-RCL-04-01 问题 29：撤回的复选框禁用并说明原因；全选跳过撤回的；删除请求和提示只含没撤回的', async () => {
+  it('TC-RCL-04-01 问题 29：撤回的复选框禁用并说明原因；删除请求和提示只含没撤回的', async () => {
     install(['msg.read.group', 'msg.delete']);
     const rows = [
       msg(5, { body: { text: 'five' } }),
@@ -197,9 +197,8 @@ describe('TC-RCL-04-03 正文页的撤回、引用和提及（AC-RCL-04-3，FE-6
     await userEvent.click(recalled);
     expect(recalled).not.toBeChecked();
 
-    const all = screen.getByRole('checkbox', { name: /全选/ });
-    await userEvent.click(all);
-    expect(all).toBeChecked();
+    await userEvent.click(screen.getByLabelText('选择第 5 条'));
+    await userEvent.click(screen.getByLabelText('选择第 3 条'));
     expect(screen.getByLabelText('选择第 5 条')).toBeChecked();
     expect(screen.getByLabelText('选择第 3 条')).toBeChecked();
     expect(recalled).not.toBeChecked();
@@ -217,27 +216,6 @@ describe('TC-RCL-04-03 正文页的撤回、引用和提及（AC-RCL-04-3，FE-6
     expect(req).toHaveLength(1);
     expect(req[0]!.body!.msgIds).toEqual(['m5', 'm3']);
     expect(req[0]!.body!.msgIds).not.toContain('m4');
-
-    // 再点一次全选取消全部。
-    await userEvent.click(all);
-    await userEvent.click(all);
-    expect(all).not.toBeChecked();
-    expect(screen.getByRole('button', { name: '删除所选（0）' })).toBeDisabled();
-  });
-
-  it('TC-RCL-04-01 问题 29：全选的 50 条名额不被撤回的占用', async () => {
-    install(['msg.read.group', 'msg.delete']);
-    const rows = [
-      msg(60, { recalled: true, recalledAt: T, recalledBy: 'u1' }),
-      ...Array.from({ length: 55 }, (_, i) => msg(55 - i, { body: { text: `t${55 - i}` } })),
-    ];
-    replies['POST /console/api/messages/body'] = [page(rows)];
-    open('/messages/body', { convId: 'group:g1' });
-    await userEvent.click(await screen.findByRole('checkbox', { name: /全选/ }));
-    expect(screen.getByRole('button', { name: '删除所选（50）' })).toBeEnabled();
-    expect(screen.getByLabelText('选择第 60 条')).not.toBeChecked();
-    expect(screen.getByLabelText('选择第 6 条')).toBeChecked();
-    expect(screen.getByLabelText('选择第 5 条')).not.toBeChecked();
   });
 
   it('TC-RCL-04-01 问题 29：勾选后重新授权、重新加载时变成撤回的，不进删除请求，也不计数', async () => {
