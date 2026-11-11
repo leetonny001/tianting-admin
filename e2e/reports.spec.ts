@@ -126,6 +126,7 @@ test('AC-MOD-04-6 AC-MOD-03-1 队列：同一用户被 3 人举报聚合显示"3
   });
   await login(page, mod);
   await page.getByRole('navigation', { name: '主菜单' }).getByRole('link', { name: '举报' }).click();
+  await expect(page.getByLabel('状态')).toHaveValue('pending');
   const table = page.getByRole('table', { name: '举报队列' });
   const userRow = table.getByRole('row').filter({ hasText: `用户 ${w.a}` });
   await expect(userRow).toContainText('3 次');
@@ -188,6 +189,18 @@ test('AC-MOD-03-11 群消息举报：POST 打开，元数据没有 note；授权
   await expect(page.locator('body')).not.toContainText('ZXQ-NOTE');
   await expect(page.locator('body')).not.toContainText(w.secret);
   expect(bodies.join('\n')).not.toContain('ZXQ-NOTE');
+
+  // 命中统计入口（backend-chat 第 121 条）：查的是被举报人，点了才查。
+  const hitsUrls: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('/moderation/hits')) hitsUrls.push(r.url().replace(/^.*\/console\/api/, ''));
+  });
+  const hitsPanel = page.getByRole('heading', { name: '命中统计' }).locator('..');
+  await expect(hitsPanel).toContainText(`被举报人 ${w.a} 命中词库的次数`);
+  expect(hitsUrls).toEqual([]);
+  await hitsPanel.getByRole('button', { name: '查询次数' }).click();
+  await expect(hitsPanel).toContainText('没有命中记录');
+  expect(hitsUrls).toEqual([`/moderation/hits?userId=${w.a}`]);
 
   await grant(page, mod, w.rText);
   await expect(page.getByText(`${w.secret} 原话`)).toBeVisible();
@@ -367,5 +380,15 @@ test('结案：别人先结案时提示"举报已被处理"并刷新（AC-MOD-04
   await expect(page.getByText('已结案')).toBeVisible();
   await expect(page.locator('dl.kv')).toContainText('状态已驳回');
   await expect(page.locator('dl.kv')).toContainText('文件内容不违规');
+
+  // 队列默认只看待处理：结案的两条（图片、文件）不在；切到"全部"后出现。
+  await page.getByRole('link', { name: '返回队列' }).click();
+  await expect(page.getByLabel('状态')).toHaveValue('pending');
+  const table = page.getByRole('table', { name: '举报队列' });
+  await expect(table.getByRole('row').filter({ hasText: `用户 ${w.a}` })).toHaveCount(1);
+  await expect(table.getByRole('row').filter({ hasText: `群消息 group:${w.g}` })).toHaveCount(1);
+  await page.getByLabel('状态').selectOption({ label: '全部' });
+  await page.getByRole('button', { name: '筛选' }).click();
+  await expect(table.getByRole('row').filter({ hasText: `群消息 group:${w.g}` })).toHaveCount(3);
   expect(problems).toEqual([]);
 });

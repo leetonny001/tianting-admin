@@ -15,7 +15,8 @@ interface Filters {
   to: string;
 }
 
-const empty: Filters = { state: '', reason: '', from: '', to: '' };
+// 默认只看待处理（协调方定的实现细节）；筛选里可以切到"全部"。
+const initial: Filters = { state: 'pending', reason: '', from: '', to: '' };
 
 /** 筛选条件 → 查询参数：状态、理由、时间（毫秒）。 */
 export function reportQuery(f: Filters, cursor: string): string {
@@ -34,8 +35,8 @@ export function reportQuery(f: Filters, cursor: string): string {
  * 队列里没有举报人、note 和正文；对象 ID 按纯文本显示。打开举报单才写审计（详情页）。
  */
 export function ReportsPage() {
-  const [form, setForm] = useState<Filters>(empty);
-  const [applied, setApplied] = useState<Filters>(empty);
+  const [form, setForm] = useState<Filters>(initial);
+  const [applied, setApplied] = useState<Filters>(initial);
   const [nonce, setNonce] = useState(0);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const list = useCursorList<ReportItem>(

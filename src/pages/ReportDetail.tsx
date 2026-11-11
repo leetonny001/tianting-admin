@@ -8,6 +8,7 @@ import { formatBytes, formatTime, messageTypeLabel, reasonValid } from '../lib/f
 import { dataUrl, inlineImage, reasonLabel, stateLabel, targetText } from '../lib/moderation';
 import { useSession } from '../session';
 import { mentionText, quoteText, Watermark } from './MessageBody';
+import { HitsPanel } from './Words';
 
 const base = (id: string) => `/console/api/reports/${encodeURIComponent(id)}`;
 
@@ -516,6 +517,7 @@ export function ReportDetailPage() {
               </div>
             </section>
           )}
+          {detail.targetUser && can('report.read') && <HitsPanel fixedUserId={detail.targetUser} />}
           <ActionLinks d={detail} />
         </>
       )}

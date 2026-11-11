@@ -29,6 +29,8 @@ const MOD = [
   'group.dissolve',
 ];
 const LIST = '/console/api/reports';
+/** 队列默认只看待处理。 */
+const PENDING = `${LIST}?state=pending`;
 const R = '/console/api/reports/r1';
 const T = Date.UTC(2026, 10, 11, 4, 5, 6);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
@@ -203,7 +205,7 @@ describe('纯函数', () => {
 
 describe('队列（AC-MOD-04-6）', () => {
   it('菜单和路由按 report.read；没有的看不到', async () => {
-    replies[`GET ${LIST}`] = [{ body: { items: [], nextCursor: '' } }];
+    replies[`GET ${PENDING}`] = [{ body: { items: [], nextCursor: '' } }];
     open('/reports', ['report.read']);
     expect(await screen.findByRole('heading', { name: '举报' })).toBeInTheDocument();
     expect(
@@ -218,7 +220,7 @@ describe('队列（AC-MOD-04-6）', () => {
   });
 
   it('同一对象 3 条聚合显示"3 次"，点开看每条（理由、状态、时间），链接到举报单', async () => {
-    replies[`GET ${LIST}`] = [
+    replies[`GET ${PENDING}`] = [
       {
         body: {
           items: [
@@ -255,11 +257,13 @@ describe('队列（AC-MOD-04-6）', () => {
     ]);
     expect(within(each).getByRole('link', { name: 'r2' })).toHaveAttribute('href', '/reports/r2');
     // 打开举报单才写审计：队列只请求列表。
-    expect(calls.filter((c) => c.path.startsWith(LIST)).map((c) => `${c.method} ${c.path}`)).toEqual([`GET ${LIST}`]);
+    expect(calls.filter((c) => c.path.startsWith(LIST)).map((c) => `${c.method} ${c.path}`)).toEqual([
+      `GET ${PENDING}`,
+    ]);
   });
 
   it('对象按纯文本显示；单聊消息没有 convId、msgIds', async () => {
-    replies[`GET ${LIST}`] = [
+    replies[`GET ${PENDING}`] = [
       {
         body: {
           items: [
@@ -284,8 +288,22 @@ describe('队列（AC-MOD-04-6）', () => {
     expect(table.querySelector('b')).toBeNull();
   });
 
+  it('默认只看"待处理"；可以切到"全部"（不带 state）', async () => {
+    replies[`GET ${PENDING}`] = [{ body: { items: [], nextCursor: '' } }];
+    replies[`GET ${LIST}`] = [{ body: { items: [item()], nextCursor: '' } }];
+    const user = userEvent.setup();
+    open('/reports');
+    await screen.findByText('没有举报');
+    expect(screen.getByLabelText('状态')).toHaveValue('pending');
+    expect(calls.filter((c) => c.path.startsWith(LIST)).map((c) => c.path)).toEqual([PENDING]);
+    await user.selectOptions(screen.getByLabelText('状态'), '全部');
+    await user.click(screen.getByRole('button', { name: '筛选' }));
+    expect(await screen.findByRole('table', { name: '举报队列' })).toHaveTextContent('用户 u1');
+    expect(calls.filter((c) => c.path.startsWith(LIST)).map((c) => c.path)).toEqual([PENDING, LIST]);
+  });
+
   it('按状态、理由、时间筛选：进查询参数（毫秒）', async () => {
-    replies[`GET ${LIST}`] = [{ body: { items: [], nextCursor: '' } }];
+    replies[`GET ${PENDING}`] = [{ body: { items: [], nextCursor: '' } }];
     const from = Date.UTC(2026, 10, 1, 0, 0);
     const to = Date.UTC(2026, 10, 2, 0, 0);
     const user = userEvent.setup();
@@ -361,6 +379,45 @@ describe('举报单：打开（POST view）和元数据', () => {
     await user.click(within(dlg).getByRole('button', { name: '查看' }));
     expect(await screen.findByText('举报人')).toBeInTheDocument();
     expect(of('POST', `${R}/view`).map((c) => c.body)).toEqual([{}, { reason: '核实用户举报' }]);
+  });
+
+  it('命中统计入口（backend-chat 第 121 条）：查的是被举报人，点了才查（写审计）', async () => {
+    replies[`POST ${R}/view`] = [{ body: detail() }];
+    replies['GET /console/api/moderation/hits?userId=u1'] = [
+      { body: { userId: 'u1', days: 90, counts: { text: 2 }, recent: [{ at: T, scene: 'text', wordId: 7 }] } },
+    ];
+    const user = userEvent.setup();
+    open('/reports/r1', ['report.read']);
+    expect(await screen.findByRole('heading', { name: '命中统计' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('用户 ID')).toBeNull();
+    expect(screen.getByRole('heading', { name: '命中统计' }).parentElement).toHaveTextContent(
+      '被举报人 u1 命中词库的次数',
+    );
+    expect(calls.some((c) => c.path.includes('/moderation/hits'))).toBe(false);
+    await user.click(screen.getByRole('button', { name: '查询次数' }));
+    const counts = await screen.findByRole('table', { name: '按场景的命中次数' });
+    expect(within(counts).getAllByRole('row')[1]).toHaveTextContent('文本消息2');
+    expect(of('GET', '/console/api/moderation/hits?userId=u1')).toHaveLength(1);
+  });
+
+  it('群举报没有被举报人：没有命中统计入口', async () => {
+    replies[`POST ${R}/view`] = [
+      {
+        body: detail({
+          targetType: 'group',
+          groupId: 'g1',
+          convType: undefined,
+          convId: undefined,
+          msgIds: undefined,
+          targetUser: undefined,
+          targetReportCount: undefined,
+          messages: undefined,
+        }),
+      },
+    ];
+    open('/reports/r1', ['report.read']);
+    expect(await screen.findByText('举报人')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '命中统计' })).toBeNull();
   });
 
   it('没有 report.evidence 看不到证据；没有 report.handle 不能结案', async () => {
