@@ -31,6 +31,8 @@ test('AC-MOD-01-7 词库页：添加、批量导入（结果汇总）、搜索�
   // 单个添加：含 HTML 的词按纯文本显示。
   await page.getByLabel('词', { exact: true }).fill(html);
   await page.getByRole('button', { name: '添加', exact: true }).click();
+  // 写操作先确认（PRD-admin 5.3 节）。
+  await page.getByRole('dialog', { name: '添加词' }).getByRole('button', { name: '添加' }).click();
   await expect(page.getByText('已添加')).toBeVisible();
   const table = page.getByRole('table', { name: '词库' });
   await expect(table.getByText(html, { exact: true })).toBeVisible();
@@ -102,6 +104,8 @@ test('命中统计：审核员按用户查次数和最近记录；运营有词�
   await expect(page.getByRole('heading', { name: '命中统计' })).toHaveCount(0);
   await page.getByLabel('词', { exact: true }).fill(word);
   await page.getByRole('button', { name: '添加', exact: true }).click();
+  // 写操作先确认（PRD-admin 5.3 节）。
+  await page.getByRole('dialog', { name: '添加词' }).getByRole('button', { name: '添加' }).click();
   await expect(page.getByText('已添加')).toBeVisible();
   await expect(page.getByRole('navigation', { name: '主菜单' }).getByRole('link', { name: '举报' })).toHaveCount(0);
 

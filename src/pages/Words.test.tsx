@@ -160,7 +160,7 @@ describe('AC-MOD-01-7 列表、搜索、添加、停用、删除', () => {
     expect(of('GET', `${LIST}?q=ZXQ&cursor=9`)).toHaveLength(1);
   });
 
-  it('添加：POST 去首尾空白的词；已有的提示状态不变；超过 64 个字不能提交', async () => {
+  it('添加：先确认（PRD-admin 5.3 节），取消不发请求；POST 去首尾空白的词；已有的提示状态不变；超过 64 个字不能提交', async () => {
     replies[`POST ${LIST}`] = [
       { body: { word: word({ wordId: 3, word: 'ZXQ-W-3' }), created: true } },
       { body: { word: word({ wordId: 3, word: 'ZXQ-W-3' }), created: false } },
@@ -171,10 +171,21 @@ describe('AC-MOD-01-7 列表、搜索、添加、停用、删除', () => {
     const input = screen.getByLabelText('词');
     await user.type(input, '  ZXQ-W-3 ');
     await user.click(screen.getByRole('button', { name: '添加' }));
+    let dlg = screen.getByRole('dialog', { name: '添加词' });
+    expect(dlg).toHaveTextContent('将添加词 ZXQ-W-3');
+    await user.click(within(dlg).getByRole('button', { name: '取消' }));
+    expect(of('POST', LIST)).toHaveLength(0);
+    expect(input).toHaveValue('  ZXQ-W-3 ');
+    await user.click(screen.getByRole('button', { name: '添加' }));
+    dlg = screen.getByRole('dialog', { name: '添加词' });
+    expect(of('POST', LIST)).toHaveLength(0);
+    await user.click(within(dlg).getByRole('button', { name: '添加' }));
     expect(await screen.findByText('已添加')).toBeInTheDocument();
     expect(of('POST', LIST)[0]!.body).toEqual({ word: 'ZXQ-W-3' });
+    expect(input).toHaveValue('');
     await user.type(input, 'ZXQ-W-3');
     await user.click(screen.getByRole('button', { name: '添加' }));
+    await user.click(within(screen.getByRole('dialog', { name: '添加词' })).getByRole('button', { name: '添加' }));
     expect(await screen.findByText('词库里已有这个词，状态不变')).toBeInTheDocument();
     await user.clear(input);
     await user.type(input, 'Z'.repeat(65));

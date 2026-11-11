@@ -12,9 +12,11 @@ const WORDS = '/console/api/moderation/words';
 /**
  * 命中统计（F-MOD-02 规则 7）：按用户查次数（按场景）和最近记录。只对有 report.read 的显示（P-48 ③，console-chat 第 27 条）。
  * 响应里只有时间、场景、词 ID，没有任何内容；查询本身写审计。
+ * 词库页自己填用户 ID；举报详情传入被举报人（fixedUserId，backend-chat 第 121 条"词库页和举报详情都有入口"），点了才查。
  */
-function HitsPanel() {
-  const [userId, setUserId] = useState('');
+export function HitsPanel({ fixedUserId }: { fixedUserId?: string }) {
+  const [typed, setUserId] = useState('');
+  const userId = fixedUserId ?? typed;
   const [hits, setHits] = useState<HitsInfo | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -38,9 +40,15 @@ function HitsPanel() {
     <section className="panel">
       <h2>命中统计</h2>
       <form className="row" onSubmit={submit}>
-        <Field label="用户 ID">
-          {(id) => <input id={id} value={userId} onChange={(e) => setUserId(e.target.value)} />}
-        </Field>
+        {fixedUserId === undefined ? (
+          <Field label="用户 ID">
+            {(id) => <input id={id} value={typed} onChange={(e) => setUserId(e.target.value)} />}
+          </Field>
+        ) : (
+          <p className="muted">
+            被举报人 <Text>{fixedUserId}</Text> 命中词库的次数（查询会写审计）
+          </p>
+        )}
         <button className="btn" type="submit" disabled={!ok || busy}>
           查询次数
         </button>
@@ -124,8 +132,7 @@ export function WordsPage() {
   const reload = () => setNonce((n) => n + 1);
 
   const [word, setWord] = useState('');
-  const [adding, setAdding] = useState(false);
-  const [addError, setAddError] = useState<unknown>(null);
+  const [adding, setAdding] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [toggling, setToggling] = useState<WordRow | null>(null);
   const [removing, setRemoving] = useState<WordRow | null>(null);
@@ -135,23 +142,12 @@ export function WordsPage() {
 
   const trimmed = word.trim();
   const wordTooLong = [...trimmed].length > WORD_MAX;
-  const add = async (e: FormEvent) => {
+  // 写操作先确认（PRD-admin 5.3 节）：提交表单只弹确认框，确认后才 POST；服务端的错误显示在框内。
+  const add = (e: FormEvent) => {
     e.preventDefault();
-    if (!trimmed || wordTooLong || adding) return;
-    setAdding(true);
-    setAddError(null);
+    if (!trimmed || wordTooLong) return;
     setNotice('');
-    try {
-      const r = await api<{ word: WordRow; created: boolean }>('POST', WORDS, { word: trimmed });
-      // 按标准化后去重（backend-chat 第 100 条）：已有的（含停用的）状态不变。
-      setNotice(r.created ? '已添加' : '词库里已有这个词，状态不变');
-      setWord('');
-      reload();
-    } catch (err) {
-      setAddError(err);
-    } finally {
-      setAdding(false);
-    }
+    setAdding(trimmed);
   };
 
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -188,10 +184,9 @@ export function WordsPage() {
           <Field label="词" hint={`最多 ${WORD_MAX} 个字`} error={wordTooLong ? `最多 ${WORD_MAX} 个字` : null}>
             {(id) => <input id={id} value={word} onChange={(e) => setWord(e.target.value)} autoComplete="off" />}
           </Field>
-          <button className="btn btn-primary" type="submit" disabled={!trimmed || wordTooLong || adding}>
+          <button className="btn btn-primary" type="submit" disabled={!trimmed || wordTooLong}>
             添加
           </button>
-          <ErrorNote error={addError} />
         </form>
         <div className="panel">
           <h2>批量导入</h2>
@@ -271,6 +266,24 @@ export function WordsPage() {
         </button>
       )}
       {can('report.read') && <HitsPanel />}
+      {adding !== null && (
+        <ConfirmDialog
+          title="添加词"
+          confirmLabel="添加"
+          onClose={() => setAdding(null)}
+          onConfirm={async () => {
+            const r = await api<{ word: WordRow; created: boolean }>('POST', WORDS, { word: adding });
+            // 按标准化后去重（backend-chat 第 100 条）：已有的（含停用的）状态不变。
+            setNotice(r.created ? '已添加' : '词库里已有这个词，状态不变');
+            setWord('');
+            reload();
+          }}
+        >
+          <p>
+            将添加词 <Text className="mono">{adding}</Text>，10 秒内生效。
+          </p>
+        </ConfirmDialog>
+      )}
       {toggling && (
         <ConfirmDialog
           title={toggling.state === 'active' ? '停用词' : '启用词'}
