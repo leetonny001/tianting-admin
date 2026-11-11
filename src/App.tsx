@@ -18,6 +18,7 @@ import { SocialSettingsPage } from './pages/SocialSettings';
 import { UserDetailPage } from './pages/UserDetail';
 import { UserImportPage } from './pages/UserImport';
 import { UsersPage } from './pages/Users';
+import { WordsPage } from './pages/Words';
 import { useSession } from './session';
 
 /** 路由守卫（FE-401）：每个路由声明权限点。权限只是界面提示，真正的判断在 console-server。 */
@@ -133,6 +134,14 @@ export function App() {
         element={
           <Guard perm="msg.read.group">
             <MessageBodyPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/moderation/words"
+        element={
+          <Guard perm="moderation.words">
+            <WordsPage />
           </Guard>
         }
       />

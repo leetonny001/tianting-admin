@@ -27,6 +27,7 @@ const ports = {
 // 可识别的固定测试密钥：scripts/check-dist.mjs 和 HAR 扫描都查它们。
 const seed = Buffer.from('tianting-e2e-signing-seed-32byte');
 const legacy = 'tianting-e2e-legacy-key';
+const reportKey = 'fake-report-key-for-admin-e2e!!!';
 
 // 端口被别的进程占着时直接失败：否则测试可能连到别人的服务，只看到难懂的 401。
 async function assertPortsFree(list) {
@@ -93,6 +94,10 @@ writeFileSync(
         'push.all',
         'stats.read',
         'account.invite',
+        // 词库和举报（PRD-chat C6，第 14.1 节）。
+        'moderation.words',
+        'report.read',
+        'report.handle',
       ],
       // 持有 push.all 必须配，和 CON_PUSH_TEMPLATES 的 type 一致（PRD-live F-PUSH-09 规则 3）。
       pushTypes: ['notice', 'activity'],
@@ -103,7 +108,7 @@ writeFileSync(
       alg: 'ed25519',
       publicKey: msgReadPub,
       bodyAccess: true,
-      scopes: ['msg.body.group', 'msg.body.c2c', 'msg.quarantine'],
+      scopes: ['msg.body.group', 'msg.body.c2c', 'msg.quarantine', 'report.evidence'],
     },
   ]),
   { mode: 0o600 },
@@ -185,6 +190,10 @@ const procs = [
       // 撤回、引用、@（PRD-chat C4，FE-671）：撤回的原文加密进隔离区，密钥没有开发默认值；这里是可识别的测试值。
       IM_MSG_ACTIONS_ENABLED: '1',
       IM_QUARANTINE_KEY: 'tianting-admin-e2e-quarantine-key-0123456789',
+      // 敏感词和举报（PRD-chat C6，FE-696、FE-697）：证据密钥没有开发默认值；这里是一眼能看出是假的 32 字节（base64）。
+      // 词库里只放特征词 ZXQ-*。单聊正文开关保持默认 off。
+      IM_MOD_ENABLED: '1',
+      IM_REPORT_KEY: Buffer.from(reportKey).toString('base64'),
       IM_PUSH_ENABLED: '1',
       // 邀请码用例要真实注册；每次注册用一个来源 IP（X-Forwarded-For），不碰每 IP 每小时 20 次的限流。
       IM_REGISTER_MODE: 'invite',

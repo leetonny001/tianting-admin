@@ -308,3 +308,27 @@ export interface PushRecord {
   replayCreated?: boolean;
   replayExpired?: boolean;
 }
+
+/** 词库的一行（CS-206）：原文按纯文本显示（AC-MOD-01-7）。 */
+export interface WordRow {
+  wordId: number;
+  word: string;
+  state: 'active' | 'disabled';
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 批量导入的结果汇总（backend-chat 第 103 条）。 */
+export interface WordImportResult {
+  added: number;
+  duplicate: number;
+  invalid: number;
+}
+
+/** 按用户查命中次数（CS-206，backend-chat 第 114 条）：只有场景、时间、词 ID，没有任何内容。 */
+export interface HitsInfo {
+  userId: string;
+  days: number;
+  counts: Record<string, number>;
+  recent: { at: number; scene: string; wordId: number }[];
+}

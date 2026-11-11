@@ -14,6 +14,8 @@ const bad = [
   'tianting-e2e-signing-seed',
   'tianting-e2e-legacy-key',
   'tianting-admin-e2e-quarantine-key',
+  'fake-report-key-for-admin-e2e',
+  'ZmFrZS1yZXBvcnQta2V5LWZvci1hZG1pbi1lMmUhISE',
   '/admin/files',
 ];
 const problems = [];

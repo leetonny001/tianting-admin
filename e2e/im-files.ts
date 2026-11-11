@@ -101,7 +101,7 @@ export async function upload(
   return up.fileId;
 }
 
-type Ack = { error?: { code: number }; data?: { msgId?: string } };
+type Ack = { error?: { code: number }; data?: { msgId?: string; seq?: number; reportId?: string } };
 
 /** 一条已登录的 WebSocket 连接：发消息（返回 msgId）、撤回。 */
 export async function imConn(tok: string) {
@@ -130,6 +130,22 @@ export async function imConn(tok: string) {
     async recall(convId: string, msgId: string) {
       const r = await call('recall', { convId, msgId });
       if (r.error) throw new Error(`recall ${r.error.code}`);
+    },
+    /** 发到群或单聊，返回 msgId 和 seq；被拒绝时返回错误码（C6：命中词库是 4510）。 */
+    async post(convType: 'group' | 'c2c', to: string, type: string, body: Record<string, unknown>) {
+      const r = await call('send', { convType, to, type, body });
+      return { code: r.error?.code ?? 0, msgId: r.data?.msgId ?? '', seq: r.data?.seq ?? 0 };
+    },
+    /** 标记已读（举报撤回的消息要 readSeq ≥ seq，PRD-chat F-MOD-03 规则 2a）。 */
+    async read(convId: string, seq: number) {
+      const r = await call('read', { convId, seq });
+      if (r.error) throw new Error(`read ${r.error.code}`);
+    },
+    /** 举报（PRD-chat F-MOD-03 规则 1），返回 reportId。 */
+    async report(data: Record<string, unknown>): Promise<string> {
+      const r = await call('report', data);
+      if (r.error || !r.data?.reportId) throw new Error(`report ${r.error?.code}`);
+      return r.data.reportId;
     },
     close: () => ws.close(),
   };
