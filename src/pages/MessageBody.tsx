@@ -26,7 +26,7 @@ export function watermarkText(username: string, nowMs: number, grantPrefix: stri
 
 const TILES = Array.from({ length: 60 }, (_, i) => i);
 
-function Watermark({ username, grantPrefix }: { username: string; grantPrefix: string }) {
+export function Watermark({ username, grantPrefix }: { username: string; grantPrefix: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 60_000);

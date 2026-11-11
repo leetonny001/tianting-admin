@@ -332,3 +332,67 @@ export interface HitsInfo {
   counts: Record<string, number>;
   recent: { at: number; scene: string; wordId: number }[];
 }
+
+/** 队列里一个对象下的一条举报（CS-207）：没有举报人和 note。 */
+export interface ReportBrief {
+  reportId: string;
+  reason: string;
+  state: string;
+  createdAt: number;
+}
+
+/** 队列的一项：按对象聚合（F-MOD-04 规则 1，backend-chat 第 117 条）。单聊消息举报只有 convType，没有 convId、msgIds。 */
+export interface ReportItem {
+  targetKey: string;
+  targetType: 'message' | 'user' | 'group' | string;
+  convType?: string;
+  convId?: string;
+  msgIds?: string[];
+  userId?: string;
+  groupId?: string;
+  count: number;
+  latestAt: number;
+  reports: ReportBrief[];
+}
+
+/** 举报单的元数据（CS-207）：没有 note、正文和文件名（AC-MOD-04-10、04-11）。 */
+export interface ReportDetail {
+  reportId: string;
+  targetType: string;
+  convType?: string;
+  convId?: string;
+  msgIds?: string[];
+  userId?: string;
+  groupId?: string;
+  reporter: string;
+  targetUser?: string;
+  targetReportCount?: number;
+  reason: string;
+  state: string;
+  createdAt: number;
+  messages?: { msgId: string; seq?: number; from?: string; type?: string; bodyLength?: number; fileSize?: number }[];
+  handledBy?: string;
+  handledAt?: number;
+  conclusion?: string;
+}
+
+/** 证据里的一条消息（CS-208）：body 同 WS 的 MsgBody，含文件名和已撤回消息的隔离原文；只存了元数据的没有 body。 */
+export interface EvidenceMessage {
+  msgId: string;
+  seq: number;
+  from: string;
+  type: string;
+  ts: number;
+  body?: BodyMessage['body'];
+  recalled?: boolean;
+  recalledAt?: number;
+  recalledBy?: string;
+}
+
+export interface Evidence {
+  messages: EvidenceMessage[];
+  note?: string;
+  undecryptable?: boolean;
+  grantPrefix: string;
+  expiresAt: number;
+}

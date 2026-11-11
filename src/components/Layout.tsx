@@ -17,6 +17,7 @@ const menu: { to: string; label: string; perm?: string | string[]; end?: boolean
   { to: '/groups', label: '群', perm: 'group.read' },
   { to: '/messages', label: '消息元数据', perm: 'msg.meta' },
   { to: '/moderation/words', label: '词库', perm: 'moderation.words' },
+  { to: '/reports', label: '举报', perm: 'report.read' },
   { to: '/push/new', label: '发系统通知', perm: 'push.user' },
   { to: '/push/drafts', label: '全员通知草稿', perm: ['push.all.request', 'push.all.approve'] },
   { to: '/push/records', label: '通知发送记录', perm: 'push.records.read' },

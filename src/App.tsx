@@ -13,6 +13,8 @@ import { MetaPage } from './pages/Meta';
 import { MessageBodyPage } from './pages/MessageBody';
 import { NotificationsPage } from './pages/Notifications';
 import { PushDraftsPage, PushNewPage, PushRecordsPage } from './pages/Push';
+import { ReportDetailPage } from './pages/ReportDetail';
+import { ReportsPage } from './pages/Reports';
 import { SettingsPage } from './pages/Settings';
 import { SocialSettingsPage } from './pages/SocialSettings';
 import { UserDetailPage } from './pages/UserDetail';
@@ -142,6 +144,22 @@ export function App() {
         element={
           <Guard perm="moderation.words">
             <WordsPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <Guard perm="report.read">
+            <ReportsPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/reports/:id"
+        element={
+          <Guard perm="report.read">
+            <ReportDetailPage />
           </Guard>
         }
       />
